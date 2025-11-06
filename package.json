@@ -1,0 +1,56 @@
+{
+  "name": "claude-studio",
+  "productName": "CLAUDE-STUDIO",
+  "version": "2.0.0",
+  "description": "AI-First IDE - Modern code editor powered by Claude AI",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder"
+  },
+  "keywords": [
+    "ai",
+    "ide",
+    "claude",
+    "electron",
+    "monaco-editor",
+    "code-editor"
+  ],
+  "author": "Claude Studio Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.0.0",
+    "electron-rebuild": "^3.2.9"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "marked": "^11.0.0",
+    "monaco-editor": "^0.44.0",
+    "node-pty": "^1.0.0",
+    "simple-git": "^3.20.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0"
+  },
+  "build": {
+    "appId": "com.claudestudio.app",
+    "productName": "CLAUDE-STUDIO",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "index.html",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Studio - AI-First IDE</title>
+    
+    <!-- 样式 -->
+    <link rel="stylesheet" href="src/ui/styles/main.css">
+    
+    <!-- Monaco Editor -->
+    <link rel="stylesheet" data-name="vs/editor/editor.main" href="node_modules/monaco-editor/min/vs/editor/editor.main.css">
+    
+    <!-- xterm.js -->
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css">
+</head>
+<body>
+    <!-- 顶部栏 -->
+    <div class="top-bar">
+        <div class="nav-buttons">
+            <button class="nav-btn" title="后退">←</button>
+            <button class="nav-btn" title="前进">→</button>
+        </div>
+        <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-input" placeholder="搜索文件 (Cmd+P)" id="quick-search">
+        </div>
+        <div class="top-actions">
+            <button class="nav-btn" id="toggle-ai-btn" title="AI 助手 (Cmd+Shift+L)" style="font-size: 18px;">🤖</button>
+            <button class="nav-btn" id="toggle-terminal" title="切换终端 (Cmd+`)">⌘</button>
+            <button class="nav-btn" id="toggle-sidebar" title="切换侧边栏">📁</button>
+            <button class="nav-btn" title="设置">⚙️</button>
+        </div>
+    </div>
+
+    <!-- 主容器 -->
+    <div class="main-container">
+        <!-- 左侧边栏 - 文件树 -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span>资源管理器</span>
+                <div class="sidebar-actions">
+                    <button class="sidebar-btn" title="新建文件" id="new-file-btn">📄</button>
+                    <button class="sidebar-btn" title="新建文件夹" id="new-folder-btn">📁</button>
+                    <button class="sidebar-btn" title="打开项目" id="open-project-btn">📂</button>
+                    <button class="sidebar-btn" title="刷新" id="refresh-files-btn">🔄</button>
+                </div>
+            </div>
+            <div id="file-tree">
+                <!-- 文件树将在这里动态生成 -->
+                <div style="padding: 20px; text-align: center; color: var(--text-dim);">
+                    <p style="margin-bottom: 12px; font-size: 16px;">📂</p>
+                    <p style="font-size: 11px;">点击"打开项目"开始</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分隔条：左侧边栏 | 编辑器 -->
+        <div class="resizer" id="sidebar-resizer"></div>
+
+        <!-- 中间 - 编辑器区域 -->
+        <div class="editor-area">
+            <!-- 标签栏 -->
+            <div class="tabs-bar" id="tabs-bar">
+                <!-- 标签页将在这里动态生成 -->
+            </div>
+            
+            <!-- Monaco Editor 容器 -->
+            <div id="editor-container"></div>
+        </div>
+
+        <!-- 分隔条：编辑器 | AI 面板 -->
+        <div class="resizer hidden" id="ai-resizer"></div>
+
+        <!-- 右侧 - AI 对话面板（默认隐藏）-->
+        <div class="ai-panel hidden">
+            <div class="ai-header">
+                <div class="ai-title">
+                    <span>🤖</span>
+                    <span>AI 助手</span>
+                </div>
+                <button class="sidebar-btn" title="关闭" id="close-ai-panel">×</button>
+            </div>
+
+            <!-- 消息区域 -->
+            <div id="chat-messages">
+                <!-- 欢迎消息 -->
+                <div class="message">
+                    <div class="message-header">
+                        <span class="message-author">Claude</span>
+                        <span class="message-time">现在</span>
+                    </div>
+                    <div class="message-body">
+                        👋 你好！我是 Claude，你的 AI 编程助手。
+                        <br><br>
+                        <strong>试试这些操作：</strong><br>
+                        • 选中代码按 <code>Cmd+K</code> 进行内联编辑<br>
+                        • 按 <code>Cmd+L</code> 打开对话面板<br>
+                        • 在这里提问关于代码的任何问题
+                    </div>
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="ai-input-area">
+                    <textarea
+                    id="chat-input" 
+                    placeholder="问我任何关于代码的问题... (Enter 发送，Shift+Enter 换行)"
+                    rows="3"
+                    ></textarea>
+                <button class="send-btn" id="send-chat-btn">➤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部 - 终端面板 -->
+    <div class="terminal-panel">
+        <div class="terminal-header">
+            <div class="terminal-title">终端</div>
+            <div class="sidebar-actions">
+                <button class="sidebar-btn" title="新建终端">➕</button>
+                <button class="sidebar-btn" title="分割终端">⫿</button>
+                <button class="sidebar-btn" title="清屏">🗑️</button>
+            </div>
+        </div>
+        <div id="terminal-container"></div>
+    </div>
+
+    <!-- 状态栏 -->
+    <div class="status-bar">
+        <div class="status-item">
+            <span>●</span>
+            <span id="status-branch">main</span>
+        </div>
+        <div class="status-item">
+            <span>📁</span>
+            <span id="status-project">未打开项目</span>
+        </div>
+        <div class="status-item" style="margin-left: auto;">
+            <span id="status-position">Ln 1, Col 1</span>
+        </div>
+        <div class="status-item">
+            <span id="status-language">Plain Text</span>
+        </div>
+        <div class="status-item">
+            <span id="status-encoding">UTF-8</span>
+        </div>
+    </div>
+
+    <!-- 脚本加载 -->
+    <script>
+        console.log('🚀 开始加载脚本...');
+    </script>
+    
+    <!-- Monaco Editor 加载器 -->
+    <script>
+        var require = { paths: { vs: 'node_modules/monaco-editor/min/vs' } };
+        console.log('1️⃣ 配置 Monaco AMD paths');
+    </script>
+    <script src="node_modules/monaco-editor/min/vs/loader.js" onload="console.log('2️⃣ Monaco loader.js 已加载')"></script>
+    
+    <!-- 临时禁用 xterm.js 测试 -->
+    <script>
+        console.log('⚠️ xterm.js 暂时禁用以测试 Monaco');
+        console.log('typeof require:', typeof require);
+        console.log('typeof define:', typeof define);
+    </script>
+    
+    <!-- 渲染进程入口 -->
+    <script src="src/renderer/app.js" onload="console.log('3️⃣ app.js 已加载')"></script>
+</body>
+</html>
