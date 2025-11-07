@@ -10,6 +10,17 @@ const { spawn } = require('child_process');
 // const pty = require('node-pty');  // 暂时禁用，等待重新编译
 const os = require('os');
 
+// Claude AI 服务
+const ClaudeService = require('./modules/ai/ClaudeService');
+const claudeService = new ClaudeService();
+
+// 对话历史管理
+const ChatHistoryManager = require('./modules/ai/ChatHistoryManager');
+const chatHistoryManager = new ChatHistoryManager();
+
+// 工作区状态文件路径
+const workspaceStateFile = path.join(app.getPath('userData'), 'workspace-state.json');
+
 // 全局变量
 let mainWindow = null;
 let projectDir = process.cwd();
@@ -163,6 +174,592 @@ function createMenu() {
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
 }
+
+// ==================== Claude AI 服务 ====================
+
+// 启动 Claude CLI
+ipcMain.handle('claude:start', async () => {
+  try {
+    const result = await claudeService.start();
+    return result;
+  } catch (error) {
+    console.error('启动 Claude CLI 失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 停止 Claude CLI
+ipcMain.handle('claude:stop', async () => {
+  try {
+    const result = await claudeService.stop();
+    return result;
+  } catch (error) {
+    console.error('停止 Claude CLI 失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 发送消息到 Claude
+ipcMain.handle('claude:sendMessage', async (event, message, options = {}) => {
+  try {
+    const response = await claudeService.sendMessage(message, options);
+    return { success: true, response };
+  } catch (error) {
+    console.error('发送消息失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 检查 Claude 状态
+ipcMain.handle('claude:checkStatus', () => {
+  return claudeService.checkStatus();
+});
+
+// 更新 Claude 配置
+ipcMain.handle('claude:updateConfig', (event, config) => {
+  claudeService.updateConfig(config);
+  return { success: true };
+});
+
+// 监听 Claude 事件并转发到渲染进程
+claudeService.on('connected', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('claude:connected');
+  }
+});
+
+claudeService.on('disconnected', () => {
+  if (mainWindow) {
+    mainWindow.webContents.send('claude:disconnected');
+  }
+});
+
+claudeService.on('reconnecting', (attempt) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('claude:reconnecting', attempt);
+  }
+});
+
+claudeService.on('error', (error) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('claude:error', error.message);
+  }
+});
+
+claudeService.on('messageChunk', (chunk) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('claude:messageChunk', chunk);
+  }
+});
+
+// ==================== 会话管理 ====================
+
+// 列出所有会话
+ipcMain.handle('claude:session:list', async () => {
+  try {
+    const { spawn } = require('child_process');
+    return new Promise((resolve) => {
+      const process = spawn('claude', ['session', 'ls'], { shell: true });
+      let output = '';
+      let error = '';
+
+      process.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        // 检查是否需要登录
+        if (error.includes('Invalid API key') || error.includes('Please run /login')) {
+          resolve({ 
+            success: false, 
+            error: 'Claude CLI 未登录，请先运行 "claude login"',
+            needLogin: true,
+            sessions: [] 
+          });
+          return;
+        }
+
+        if (code === 0 && output.trim()) {
+          // 解析文本输出
+          const lines = output.trim().split('\n');
+          const sessions = [];
+          
+          // 跳过表头，解析每一行
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line) {
+              // 假设格式: "session-id  created-time  model"
+              const parts = line.split(/\s+/);
+              if (parts.length >= 1) {
+                sessions.push({
+                  id: parts[0],
+                  created: parts.length > 1 ? parts[1] : '',
+                  model: parts.length > 2 ? parts.slice(2).join(' ') : ''
+                });
+              }
+            }
+          }
+          
+          resolve({ success: true, sessions });
+        } else {
+          // 返回空列表而不是错误
+          resolve({ success: true, sessions: [], message: '暂无会话' });
+        }
+      });
+
+      // 缩短超时时间到 5 秒
+      setTimeout(() => {
+        process.kill();
+        // 超时也返回空列表
+        resolve({ success: true, sessions: [], message: '获取会话超时' });
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('列出会话失败:', error);
+    return { success: true, sessions: [], message: '获取会话失败' };
+  }
+});
+
+// 显示会话详情
+ipcMain.handle('claude:session:show', async (event, sessionId) => {
+  try {
+    const { spawn } = require('child_process');
+    return new Promise((resolve) => {
+      const process = spawn('claude', ['session', 'show', sessionId], { shell: true });
+      let output = '';
+      let error = '';
+
+      process.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0 && output.trim()) {
+          // 返回原始文本输出
+          resolve({ success: true, session: { id: sessionId, output: output.trim() } });
+        } else {
+          resolve({ success: false, error: error || '无法获取会话详情' });
+        }
+      });
+
+      setTimeout(() => {
+        process.kill();
+        resolve({ success: false, error: '获取会话详情超时' });
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('显示会话详情失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 删除会话
+ipcMain.handle('claude:session:delete', async (event, sessionId) => {
+  try {
+    const { spawn } = require('child_process');
+    return new Promise((resolve) => {
+      const process = spawn('claude', ['session', 'delete', sessionId, '--yes'], { shell: true });
+      let error = '';
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, message: 'Session deleted successfully' });
+        } else {
+          resolve({ success: false, error: error || '删除会话失败' });
+        }
+      });
+
+      setTimeout(() => {
+        process.kill();
+        resolve({ success: false, error: '删除会话超时' });
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('删除会话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 恢复会话
+ipcMain.handle('claude:session:restore', async (event, sessionId) => {
+  try {
+    const { spawn } = require('child_process');
+    return new Promise((resolve) => {
+      const process = spawn('claude', ['session', 'restore', sessionId], { shell: true });
+      let error = '';
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, message: 'Session restored successfully' });
+        } else {
+          resolve({ success: false, error: error || '恢复会话失败' });
+        }
+      });
+
+      setTimeout(() => {
+        process.kill();
+        resolve({ success: false, error: '恢复会话超时' });
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('恢复会话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ==================== 模型管理 ====================
+
+// 列出可用模型
+ipcMain.handle('claude:model:list', async () => {
+  try {
+    const { spawn } = require('child_process');
+    return new Promise((resolve, reject) => {
+      const process = spawn('claude', ['model', 'ls'], { shell: true });
+      let output = '';
+      let error = '';
+
+      process.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        // 无论成功失败，都返回默认模型列表
+        // 因为 claude CLI 可能不支持 model ls 命令
+        resolve({ 
+          success: true, 
+          models: [
+            { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: '最新最强大的模型' },
+            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: '最强大的模型' },
+            { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
+            { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
+          ]
+        });
+      });
+
+      setTimeout(() => {
+        process.kill();
+        resolve({ 
+          success: true, 
+          models: [
+            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: '最强大的模型' },
+            { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
+            { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
+          ]
+        });
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('列出模型失败:', error);
+    // 返回默认模型列表而不是错误
+    return { 
+      success: true, 
+      models: [
+        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: '最强大的模型' },
+        { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
+        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
+      ]
+    };
+  }
+});
+
+// 设置默认模型
+ipcMain.handle('claude:model:set', async (event, modelId) => {
+  try {
+    // 更新 ClaudeService 的配置
+    claudeService.updateConfig({ model: modelId });
+    
+    // 如果 claude CLI 支持，也更新 CLI 配置
+    const { spawn } = require('child_process');
+    return new Promise((resolve, reject) => {
+      const process = spawn('claude', ['model', 'set', modelId], { shell: true });
+      let error = '';
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        // 即使 CLI 命令失败，只要我们更新了服务配置就算成功
+        resolve({ success: true, message: `Model set to ${modelId}` });
+      });
+
+      setTimeout(() => {
+        process.kill();
+        resolve({ success: true, message: `Model set to ${modelId}` });
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('设置模型失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取当前模型
+ipcMain.handle('claude:model:current', () => {
+  try {
+    const currentModel = claudeService.config.model || 'claude-3-opus-20240229';
+    return { success: true, model: currentModel };
+  } catch (error) {
+    console.error('获取当前模型失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ==================== 对话历史管理 ====================
+
+// 开始新对话
+ipcMain.handle('history:new', (event, context) => {
+  try {
+    const conversationId = chatHistoryManager.startNewConversation(context);
+    return { success: true, conversationId };
+  } catch (error) {
+    console.error('开始新对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 添加消息
+ipcMain.handle('history:addMessage', (event, role, content, metadata) => {
+  try {
+    const messageId = chatHistoryManager.addMessage(role, content, metadata);
+    return { success: true, messageId };
+  } catch (error) {
+    console.error('添加消息失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 保存当前对话
+ipcMain.handle('history:save', async () => {
+  try {
+    await chatHistoryManager.saveCurrentConversation();
+    return { success: true };
+  } catch (error) {
+    console.error('保存对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取所有对话
+ipcMain.handle('history:getAll', () => {
+  try {
+    const conversations = chatHistoryManager.getAllConversations();
+    return { success: true, conversations };
+  } catch (error) {
+    console.error('获取对话列表失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 根据 ID 获取对话
+ipcMain.handle('history:getById', (event, id) => {
+  try {
+    const conversation = chatHistoryManager.getConversationById(id);
+    return { success: true, conversation };
+  } catch (error) {
+    console.error('获取对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 恢复对话
+ipcMain.handle('history:restore', (event, id) => {
+  try {
+    const conversation = chatHistoryManager.restoreConversation(id);
+    return { success: true, conversation };
+  } catch (error) {
+    console.error('恢复对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 删除对话
+ipcMain.handle('history:delete', async (event, id) => {
+  try {
+    await chatHistoryManager.deleteConversation(id);
+    return { success: true };
+  } catch (error) {
+    console.error('删除对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 搜索对话
+ipcMain.handle('history:search', (event, query) => {
+  try {
+    const results = chatHistoryManager.search(query);
+    return { success: true, results };
+  } catch (error) {
+    console.error('搜索对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 导出对话
+ipcMain.handle('history:export', async (event, id, filePath) => {
+  try {
+    if (!filePath) {
+      // 显示保存对话框
+      const result = await dialog.showSaveDialog(mainWindow, {
+        title: '导出对话',
+        defaultPath: `conversation-${id}.json`,
+        filters: [
+          { name: 'JSON', extensions: ['json'] },
+          { name: 'Markdown', extensions: ['md'] }
+        ]
+      });
+      
+      if (result.canceled) {
+        return { success: false, canceled: true };
+      }
+      
+      filePath = result.filePath;
+    }
+    
+    // 判断导出格式
+    if (filePath.endsWith('.md')) {
+      const markdown = chatHistoryManager.toMarkdown(id);
+      await fs.promises.writeFile(filePath, markdown, 'utf-8');
+    } else {
+      await chatHistoryManager.exportConversation(id, filePath);
+    }
+    
+    return { success: true, filePath };
+  } catch (error) {
+    console.error('导出对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 导出所有对话
+ipcMain.handle('history:exportAll', async () => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出所有对话',
+      defaultPath: 'all-conversations.json',
+      filters: [
+        { name: 'JSON', extensions: ['json'] }
+      ]
+    });
+    
+    if (result.canceled) {
+      return { success: false, canceled: true };
+    }
+    
+    await chatHistoryManager.exportAll(result.filePath);
+    return { success: true, filePath: result.filePath };
+  } catch (error) {
+    console.error('导出所有对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 导入对话
+ipcMain.handle('history:import', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '导入对话',
+      filters: [
+        { name: 'JSON', extensions: ['json'] }
+      ],
+      properties: ['openFile']
+    });
+    
+    if (result.canceled) {
+      return { success: false, canceled: true };
+    }
+    
+    const conversationId = await chatHistoryManager.importConversation(result.filePaths[0]);
+    return { success: true, conversationId };
+  } catch (error) {
+    console.error('导入对话失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 清空所有历史
+ipcMain.handle('history:clearAll', async () => {
+  try {
+    await chatHistoryManager.clearAll();
+    return { success: true };
+  } catch (error) {
+    console.error('清空历史失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 获取统计信息
+ipcMain.handle('history:getStats', () => {
+  try {
+    const stats = chatHistoryManager.getStats();
+    return { success: true, stats };
+  } catch (error) {
+    console.error('获取统计信息失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ==================== 工作区状态管理 ====================
+
+// 保存工作区状态
+ipcMain.handle('workspace:saveState', async (event, state) => {
+  try {
+    await fs.promises.writeFile(workspaceStateFile, JSON.stringify(state, null, 2), 'utf-8');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ 保存工作区状态失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 加载工作区状态
+ipcMain.handle('workspace:loadState', async () => {
+  try {
+    if (!fs.existsSync(workspaceStateFile)) {
+      return { success: true, state: null };
+    }
+    
+    const content = await fs.promises.readFile(workspaceStateFile, 'utf-8');
+    const state = JSON.parse(content);
+    return { success: true, state };
+  } catch (error) {
+    console.error('❌ 加载工作区状态失败:', error);
+    return { success: false, error: error.message, state: null };
+  }
+});
+
+// 清除工作区状态
+ipcMain.handle('workspace:clearState', async () => {
+  try {
+    if (fs.existsSync(workspaceStateFile)) {
+      await fs.promises.unlink(workspaceStateFile);
+    }
+    return { success: true };
+  } catch (error) {
+    console.error('❌ 清除工作区状态失败:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 // ==================== 文件系统操作 ====================
 
@@ -528,10 +1125,17 @@ ipcMain.handle('git-log', async (event, limit = 10) => {
 // 设置应用名称
 app.setName('CLAUDE-STUDIO');
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   
   // 再次设置应用名称
   app.setName('CLAUDE-STUDIO');
+  
+  // 初始化对话历史管理器
+  try {
+    await chatHistoryManager.init();
+  } catch (error) {
+    console.error('❌ 对话历史初始化失败:', error);
+  }
   
   createWindow();
   

@@ -421,6 +421,15 @@
       }
       return '';
     }
+
+    getActiveFilePath() {
+      return store.getState('editor.activeFile') || null;
+    }
+
+    getActiveLanguage() {
+      const model = this.editor?.getModel();
+      return model ? model.getLanguageId() : null;
+    }
   }
 
   // ==================== AI 服务 ====================
@@ -799,6 +808,278 @@
     }
   }
 
+  // ==================== 上下文管理器 ====================
+  class ContextManager {
+    constructor(editorManager) {
+      this.editorManager = editorManager;
+    }
+
+    /**
+     * 获取当前编辑器上下文
+     */
+    getCurrentContext() {
+      if (!this.editorManager || !this.editorManager.editor) {
+        return null;
+      }
+
+      const model = this.editorManager.editor.getModel();
+      if (!model) {
+        return null;
+      }
+
+      const selection = this.editorManager.editor.getSelection();
+      const position = this.editorManager.editor.getPosition();
+      const lineContent = position ? model.getLineContent(position.lineNumber) : '';
+
+      return {
+        filePath: this.editorManager.activeFile || 'untitled',
+        language: model.getLanguageId(),
+        content: model.getValue(),
+        lineCount: model.getLineCount(),
+        selection: selection ? model.getValueInRange(selection) : '',
+        hasSelection: selection && !selection.isEmpty(),
+        cursorLine: position ? position.lineNumber : 0,
+        cursorColumn: position ? position.column : 0,
+        currentLine: lineContent,
+        textBeforeCursor: lineContent.substring(0, position ? position.column - 1 : 0)
+      };
+    }
+
+    /**
+     * 构建 AI 提示词
+     */
+    buildPrompt(userMessage, context) {
+      if (!context) {
+        return userMessage;
+      }
+
+      const parts = [];
+
+      // 添加文件信息
+      if (context.filePath && context.filePath !== 'untitled') {
+        parts.push(`文件: ${context.filePath}`);
+        parts.push(`语言: ${context.language}`);
+        parts.push('');
+      }
+
+      // 添加选中代码
+      if (context.hasSelection && context.selection) {
+        parts.push('选中的代码:');
+        parts.push('```' + context.language);
+        parts.push(context.selection);
+        parts.push('```');
+        parts.push('');
+      }
+
+      // 添加用户消息
+      parts.push(userMessage);
+
+      return parts.join('\n');
+    }
+
+    /**
+     * 提取代码块
+     */
+    extractCodeBlock(response) {
+      const codeBlockRegex = /```[\w]*\n([\s\S]*?)\n```/;
+      const match = response.match(codeBlockRegex);
+      return match && match[1] ? match[1].trim() : response.trim();
+    }
+  }
+
+  // ==================== 工作区状态持久化 ====================
+  class WorkspaceState {
+    constructor() {
+      this.storageKey = 'claude-studio-workspace-state';
+      this.autoSaveInterval = null;
+    }
+
+    init() {
+      // 延迟启动自动保存，避免在恢复状态前保存空状态
+      setTimeout(() => {
+        this.startAutoSave();
+      }, 5000); // 5 秒后再启动自动保存
+      
+      window.addEventListener('beforeunload', () => {
+        this.saveState();
+      });
+    }
+
+    async saveState() {
+      try {
+        const state = this.collectState();
+        
+        // 保护机制：如果当前没有打开标签，检查之前是否有保存
+        if (state.editor.openTabs.length === 0) {
+          const loadResult = await window.electronAPI.workspace.loadState();
+          if (loadResult.success && loadResult.state) {
+            if (loadResult.state.editor?.openTabs?.length > 0) {
+              return false;
+            }
+          }
+        }
+        
+        // 使用文件系统保存
+        const result = await window.electronAPI.workspace.saveState(state);
+        if (result.success) {
+          return true;
+        } else {
+          console.error('❌ 保存失败:', result.error);
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ 保存工作区状态失败:', error);
+        return false;
+      }
+    }
+
+    async loadState() {
+      try {
+        const result = await window.electronAPI.workspace.loadState();
+        if (!result.success) {
+          console.error('❌ 加载失败:', result.error);
+          return null;
+        }
+        
+        if (!result.state) {
+          return null;
+        }
+        
+        return result.state;
+      } catch (error) {
+        console.error('❌ 恢复工作区状态失败:', error);
+        return null;
+      }
+    }
+
+    collectState() {
+      const app = window.claudeStudio;
+      
+      return {
+        version: '1.0',
+        timestamp: Date.now(),
+        editor: {
+          openTabs: this.collectOpenTabs(),
+          activeFileIndex: this.getActiveTabIndex()
+        },
+        ui: {
+          sidebarWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-width')) || 250,
+          aiPanelVisible: document.querySelector('.ai-panel')?.style.display !== 'none',
+          aiPanelWidth: parseInt(getComputedStyle(document.documentElement).getPropertyValue('--ai-panel-width')) || 400
+        }
+      };
+    }
+
+    collectOpenTabs() {
+      const tabs = [];
+      const tabElements = document.querySelectorAll('.tab-item');
+      
+      tabElements.forEach((tab, index) => {
+        const filePath = tab.dataset.path;
+        if (filePath) {
+          tabs.push({
+            path: filePath,
+            title: tab.querySelector('.tab-name')?.textContent || filePath.split('/').pop()
+          });
+        }
+      });
+      
+      return tabs;
+    }
+
+    getActiveTabIndex() {
+      const tabs = Array.from(document.querySelectorAll('.tab-item'));
+      return tabs.findIndex(tab => tab.classList.contains('active'));
+    }
+
+    async applyState(state, app) {
+      if (!state) return;
+      
+      try {
+        if (state.ui) {
+          this.applyUIState(state.ui);
+        }
+        
+        if (state.editor?.openTabs?.length > 0) {
+          await this.applyEditorState(state.editor, app);
+        }
+      } catch (error) {
+        console.error('❌ 应用工作区状态失败:', error);
+      }
+    }
+
+    applyUIState(uiState) {
+      if (uiState.sidebarWidth) {
+        document.documentElement.style.setProperty('--sidebar-width', `${uiState.sidebarWidth}px`);
+      }
+      if (uiState.aiPanelWidth) {
+        document.documentElement.style.setProperty('--ai-panel-width', `${uiState.aiPanelWidth}px`);
+      }
+      if (uiState.aiPanelVisible) {
+        const aiPanel = document.querySelector('.ai-panel');
+        if (aiPanel) aiPanel.style.display = 'flex';
+      }
+    }
+
+    async applyEditorState(editorState, app) {
+      if (!app || !editorState.openTabs) return;
+      
+      for (const tab of editorState.openTabs) {
+        try {
+          // 读取文件内容
+          const fileResult = await window.electronAPI.readFile(tab.path);
+          
+          if (!fileResult || !fileResult.success) {
+            console.error(`❌ 文件读取失败: ${tab.title}`, fileResult);
+            continue;
+          }
+          
+          // 打开文件到编辑器
+          await app.editor.openFile(tab.path, fileResult.content);
+        } catch (error) {
+          console.error(`⚠️  无法恢复标签: ${tab.title}`, error);
+        }
+      }
+      
+      // 延迟激活，确保标签已渲染
+      setTimeout(() => {
+        if (editorState.activeFileIndex >= 0) {
+          const tabs = document.querySelectorAll('.tab-item');
+          if (tabs[editorState.activeFileIndex]) {
+            tabs[editorState.activeFileIndex].click();
+          }
+        }
+      }, 200);
+    }
+
+    startAutoSave() {
+      this.autoSaveInterval = setInterval(() => {
+        this.saveState();
+      }, 30000);
+    }
+
+    stopAutoSave() {
+      if (this.autoSaveInterval) {
+        clearInterval(this.autoSaveInterval);
+      }
+    }
+
+    async clearState() {
+      try {
+        const result = await window.electronAPI.workspace.clearState();
+        if (result.success) {
+          return true;
+        } else {
+          console.error('❌ 清除失败:', result.error);
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ 清除工作区状态失败:', error);
+        return false;
+      }
+    }
+  }
+
   // ==================== 主应用类 ====================
   class ClaudeStudio {
     constructor() {
@@ -806,7 +1087,13 @@
       this.ai = null;
       this.files = null;
       this.resizer = null;
+      this.contextManager = null;
+      this.errorDiagnostics = null;
+      this.workspaceState = null;
+      this.claudeConnected = false;
+      this.claudeReconnecting = false;
       this.initialized = false;
+      this.currentConversationId = null;
     }
 
     async init() {
@@ -822,11 +1109,16 @@
         this.ai = new AIService();
         this.files = new FileManager();
         this.resizer = new ResizerManager();
+        this.contextManager = new ContextManager(this.editor);
 
         // 初始化编辑器
         const editorContainer = document.getElementById('editor-container');
         if (editorContainer) {
           await this.editor.init(editorContainer);
+          // 设置代码补全
+          this.setupCodeCompletion();
+          // 初始化错误诊断（需要 ErrorDiagnostics 模块）
+          this.initErrorDiagnostics();
         }
 
         // 初始化文件树
@@ -850,6 +1142,32 @@
             this.toggleAIPanel();
           });
         }
+
+        // 启动 Claude AI
+        await this.startClaude();
+        
+        // 设置 Claude 事件监听
+        this.setupClaudeListeners();
+        
+        // 初始化对话历史
+        await this.initChatHistory();
+
+        // 初始化工作区状态管理
+        this.workspaceState = new WorkspaceState();
+        this.workspaceState.init();
+        
+        // 恢复上次的工作区状态
+        const savedState = await this.workspaceState.loadState();
+        if (savedState) {
+          console.log('📂 发现保存的工作区状态，正在恢复...');
+          // 延迟恢复，确保 DOM 已准备好
+          setTimeout(async () => {
+            await this.workspaceState.applyState(savedState, this);
+          }, 500);
+        }
+
+        // 将应用实例挂载到全局，供 WorkspaceState 访问
+        window.claudeStudio = this;
 
         this.initialized = true;
         this.showWelcome();
@@ -925,6 +1243,38 @@
         });
       }
 
+      // 对话历史按钮
+      const historyBtn = document.getElementById('history-btn');
+      if (historyBtn) {
+        historyBtn.addEventListener('click', () => {
+          this.showHistoryDialog();
+        });
+      }
+
+      // 工作区状态管理按钮
+      const workspaceStateBtn = document.getElementById('workspace-state-btn');
+      if (workspaceStateBtn) {
+        workspaceStateBtn.addEventListener('click', () => {
+          this.showWorkspaceStateDialog();
+        });
+      }
+
+      // 会话管理按钮
+      const sessionsBtn = document.getElementById('sessions-btn');
+      if (sessionsBtn) {
+        sessionsBtn.addEventListener('click', () => {
+          this.showSessionsDialog();
+        });
+      }
+
+      // 模型选择按钮
+      const modelSelectBtn = document.getElementById('model-select-btn');
+      if (modelSelectBtn) {
+        modelSelectBtn.addEventListener('click', () => {
+          this.showModelSelectDialog();
+        });
+      }
+
       // 顶部栏按钮绑定
       
       // AI 助手按钮
@@ -972,6 +1322,13 @@
       document.addEventListener('keydown', async (e) => {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const cmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+
+        // Cmd/Ctrl + K - 内联编辑
+        if (cmdOrCtrl && (e.key === 'k' || e.key === 'K' || e.code === 'KeyK' || e.keyCode === 75)) {
+          e.preventDefault();
+          e.stopPropagation();
+          await this.showInlineEditDialog();
+        }
 
         // Cmd/Ctrl + L - AI 聊天
         // 使用 e.code 而不是 e.key，因为 macOS 上 Cmd+L 的 e.key 可能是 'Meta'
@@ -1090,33 +1447,152 @@
       }
     }
 
+    /**
+     * 启动 Claude AI 服务
+     */
+    async startClaude() {
+      try {
+        if (window.electronAPI && window.electronAPI.claude) {
+          const result = await window.electronAPI.claude.start();
+          if (result.success) {
+            this.claudeConnected = true;
+            this.updateClaudeStatus('connected');
+            console.log('✅ Claude AI 已启动');
+          } else {
+            console.warn('⚠️ Claude AI 启动失败:', result.message);
+            this.updateClaudeStatus('disconnected');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Claude AI 启动异常:', error);
+        this.updateClaudeStatus('error', error.message);
+      }
+    }
+
+    /**
+     * 设置 Claude 事件监听
+     */
+    setupClaudeListeners() {
+      if (!window.electronAPI || !window.electronAPI.claude) return;
+
+      // 连接成功
+      window.electronAPI.claude.onConnected(() => {
+        this.claudeConnected = true;
+        this.claudeReconnecting = false;
+        this.updateClaudeStatus('connected');
+        console.log('🔗 Claude AI 已连接');
+      });
+
+      // 连接断开
+      window.electronAPI.claude.onDisconnected(() => {
+        this.claudeConnected = false;
+        this.updateClaudeStatus('disconnected');
+        console.warn('⚠️ Claude AI 已断开');
+      });
+
+      // 重连中
+      window.electronAPI.claude.onReconnecting((attempt) => {
+        this.claudeReconnecting = true;
+        this.updateClaudeStatus('reconnecting', `重连中 (${attempt})`);
+        console.log(`🔄 Claude AI 重连中 (第 ${attempt} 次尝试)`);
+      });
+
+      // 错误
+      window.electronAPI.claude.onError((error) => {
+        this.updateClaudeStatus('error', error.message);
+        console.error('❌ Claude AI 错误:', error);
+      });
+
+      // 消息块（流式响应）
+      window.electronAPI.claude.onMessageChunk((chunk) => {
+        this.appendToLastMessage(chunk);
+      });
+    }
+
+    /**
+     * 更新 Claude 连接状态显示
+     */
+    updateClaudeStatus(status, message = '') {
+      const statusIndicator = document.querySelector('.claude-status');
+      if (!statusIndicator) return;
+
+      const statusConfig = {
+        connected: { text: '● 已连接', class: 'status-connected', color: '#4ade80' },
+        disconnected: { text: '● 已断开', class: 'status-disconnected', color: '#ef4444' },
+        reconnecting: { text: `● ${message}`, class: 'status-reconnecting', color: '#fbbf24' },
+        error: { text: `● 错误`, class: 'status-error', color: '#ef4444' }
+      };
+
+      const config = statusConfig[status] || statusConfig.disconnected;
+      statusIndicator.textContent = config.text;
+      statusIndicator.className = `claude-status ${config.class}`;
+      statusIndicator.style.color = config.color;
+    }
+
     async sendChatMessage() {
       const chatInput = document.getElementById('chat-input');
       const message = chatInput?.value.trim();
       
       if (!message) return;
 
+      // 检查 Claude 是否连接
+      if (!this.claudeConnected) {
+        this.addMessageToChat('error', 'Claude AI 未连接，请稍候...');
+        // 尝试重新启动
+        await this.startClaude();
+        return;
+      }
+
       if (chatInput) {
         chatInput.value = '';
       }
 
+      // 显示用户消息
       this.addMessageToChat('user', message);
+      
+      // 保存用户消息到历史
+      await window.electronAPI.history.addMessage('user', message);
+
+      // 创建 AI 消息占位符（用于流式响应）
+      const assistantMessageId = this.addMessageToChat('assistant', '');
 
       try {
-        const { response } = await this.ai.chat(message);
-        this.addMessageToChat('assistant', response);
+        // 获取上下文
+        const context = this.contextManager.getCurrentContext();
+        const prompt = this.contextManager.buildPrompt(message, context);
+
+        // 发送消息到 Claude
+        const result = await window.electronAPI.claude.sendMessage(prompt);
+        
+        // 检查结果
+        if (result && result.success && result.response) {
+          // 更新最后的消息内容
+          this.updateMessageContent(assistantMessageId, result.response);
+          // 保存 AI 响应到历史
+          await window.electronAPI.history.addMessage('assistant', result.response);
+          // 保存当前对话
+          await window.electronAPI.history.save();
+        } else {
+          // 显示错误
+          this.updateMessageContent(assistantMessageId, '');
+          this.addMessageToChat('error', 'AI 响应失败: ' + (result?.error || '未知错误'));
+        }
       } catch (error) {
         console.error('AI 聊天失败:', error);
+        this.updateMessageContent(assistantMessageId, '');
         this.addMessageToChat('error', 'AI 响应失败: ' + error.message);
       }
     }
 
     addMessageToChat(role, content) {
       const messagesContainer = document.getElementById('chat-messages');
-      if (!messagesContainer) return;
+      if (!messagesContainer) return null;
 
       const messageDiv = document.createElement('div');
+      const messageId = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      messageDiv.id = messageId;
       messageDiv.className = `message message-${role}`;
+      messageDiv.dataset.rawContent = content; // 保存原始内容用于流式更新
       
       const now = new Date();
       const time = now.toLocaleTimeString('zh-CN', { 
@@ -1137,20 +1613,1258 @@
 
       messagesContainer.appendChild(messageDiv);
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      return messageId;
+    }
+
+    /**
+     * 追加内容到最后一条消息（用于流式响应）
+     */
+    appendToLastMessage(chunk) {
+      const messagesContainer = document.getElementById('chat-messages');
+      if (!messagesContainer) return;
+
+      const messages = messagesContainer.querySelectorAll('.message-assistant');
+      if (messages.length === 0) return;
+
+      const lastMessage = messages[messages.length - 1];
+      const messageBody = lastMessage.querySelector('.message-body');
+      if (!messageBody) return;
+
+      // 累积原始内容
+      const currentRawContent = lastMessage.dataset.rawContent || '';
+      const newRawContent = currentRawContent + chunk;
+      lastMessage.dataset.rawContent = newRawContent;
+
+      // 更新显示内容
+      messageBody.innerHTML = this.formatMessage(newRawContent);
+      
+      // 自动滚动到底部
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    /**
+     * 更新指定消息的内容
+     */
+    updateMessageContent(messageId, content) {
+      if (!messageId) return;
+
+      const messageDiv = document.getElementById(messageId);
+      if (!messageDiv) return;
+
+      const messageBody = messageDiv.querySelector('.message-body');
+      if (!messageBody) return;
+
+      messageDiv.dataset.rawContent = content;
+      messageBody.innerHTML = this.formatMessage(content);
     }
 
     formatMessage(content) {
-      let formatted = content;
+      if (!content) return '';
+      
+      // 确保 content 是字符串
+      let formatted = typeof content === 'string' ? content : String(content);
+      
+      // 代码块
       formatted = formatted.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+      // 行内代码
       formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // 粗体
       formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      // 斜体
+      formatted = formatted.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      // 换行
       formatted = formatted.replace(/\n/g, '<br>');
       return formatted;
+    }
+
+    /**
+     * 初始化错误诊断系统
+     */
+    initErrorDiagnostics() {
+      // 注意：ErrorDiagnostics 需要动态加载
+      // 这里暂时只初始化占位符，实际功能在后续完善
+      try {
+        // 如果 ErrorDiagnostics 类可用
+        if (typeof ErrorDiagnostics !== 'undefined') {
+          this.errorDiagnostics = new ErrorDiagnostics(
+            this.editor.editor,
+            window.electronAPI.claude,
+            this.contextManager
+          );
+          this.errorDiagnostics.init();
+        }
+      } catch (error) {
+        console.warn('错误诊断初始化失败:', error);
+      }
+    }
+
+    /**
+     * 初始化对话历史
+     */
+    async initChatHistory() {
+      try {
+        // 开始新对话
+        const result = await window.electronAPI.history.new({
+          filePath: this.editor.getActiveFilePath(),
+          language: this.editor.getActiveLanguage(),
+          projectPath: await window.electronAPI.getProjectDir()
+        });
+        
+        if (result.success) {
+          this.currentConversationId = result.conversationId;
+        }
+      } catch (error) {
+        console.error('初始化对话历史失败:', error);
+      }
     }
 
     showWelcome() {
       // Show welcome message
       toast.show('🤖 Welcome to Claude Studio v2.0!', 'info', 3000);
+    }
+
+    // ==================== 内联编辑功能 ====================
+
+    /**
+     * 显示内联编辑对话框
+     */
+    async showInlineEditDialog() {
+      // 检查是否有编辑器和选中的代码
+      if (!this.editor || !this.editor.editor) {
+        toast.show('⚠️ 请先打开一个文件', 'warning');
+        return;
+      }
+
+      const selection = this.editor.editor.getSelection();
+      if (!selection || selection.isEmpty()) {
+        toast.show('⚠️ 请先选中要编辑的代码', 'warning');
+        return;
+      }
+
+      // 检查 Claude 是否连接
+      if (!this.claudeConnected) {
+        toast.show('⚠️ Claude AI 未连接', 'warning');
+        await this.startClaude();
+        return;
+      }
+
+      // 创建内联编辑对话框
+      const dialog = document.createElement('div');
+      dialog.className = 'inline-edit-dialog';
+      dialog.innerHTML = `
+        <div class="inline-edit-content">
+          <div class="inline-edit-header">
+            <span>✨ AI 内联编辑</span>
+            <button class="inline-edit-close">×</button>
+          </div>
+          <div class="inline-edit-body">
+            <input 
+              type="text" 
+              class="inline-edit-input" 
+              placeholder="输入编辑指令，例如：重构这段代码、添加注释、优化性能..."
+              autofocus
+            />
+            <div class="inline-edit-actions">
+              <button class="inline-edit-cancel">取消 (Esc)</button>
+              <button class="inline-edit-submit">编辑 (Enter)</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const input = dialog.querySelector('.inline-edit-input');
+      const submitBtn = dialog.querySelector('.inline-edit-submit');
+      const cancelBtn = dialog.querySelector('.inline-edit-cancel');
+      const closeBtn = dialog.querySelector('.inline-edit-close');
+
+      // 聚焦输入框
+      setTimeout(() => input.focus(), 100);
+
+      // 关闭对话框
+      const closeDialog = () => {
+        dialog.remove();
+      };
+
+      // 提交编辑
+      const submitEdit = async () => {
+        const instruction = input.value.trim();
+        if (!instruction) {
+          toast.show('⚠️ 请输入编辑指令', 'warning');
+          return;
+        }
+
+        closeDialog();
+        await this.handleInlineEdit(instruction);
+      };
+
+      // 绑定事件
+      submitBtn.addEventListener('click', submitEdit);
+      cancelBtn.addEventListener('click', closeDialog);
+      closeBtn.addEventListener('click', closeDialog);
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitEdit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closeDialog();
+        }
+      });
+
+      // 点击外部关闭
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+          closeDialog();
+        }
+      });
+    }
+
+    /**
+     * 处理内联编辑请求
+     */
+    async handleInlineEdit(instruction) {
+      try {
+        const editor = this.editor.editor;
+        const model = editor.getModel();
+        const selection = editor.getSelection();
+        
+        if (!selection || selection.isEmpty()) {
+          toast.show('⚠️ 没有选中的代码', 'warning');
+          return;
+        }
+
+        const selectedText = model.getValueInRange(selection);
+        
+        // 显示加载状态
+        toast.show('⏳ AI 正在编辑代码...', 'info');
+
+        // 构建提示词
+        const context = this.contextManager.getCurrentContext();
+        const prompt = `请根据以下指令修改选中的代码。只返回修改后的代码，不要包含任何解释或 markdown 代码块标记。
+
+指令: ${instruction}
+
+原始代码:
+${selectedText}
+
+修改后的代码:`;
+
+        // 发送到 Claude
+        const response = await window.electronAPI.claude.sendMessage(prompt);
+        
+        if (!response) {
+          throw new Error('AI 未返回响应');
+        }
+
+        // 提取代码
+        const editedCode = this.contextManager.extractCodeBlock(response);
+
+        // 显示 diff 预览
+        this.showDiffPreview(selectedText, editedCode, selection);
+
+      } catch (error) {
+        console.error('内联编辑失败:', error);
+        toast.show(`❌ 编辑失败: ${error.message}`, 'error');
+      }
+    }
+
+    /**
+     * 显示 diff 预览并让用户选择接受或拒绝
+     */
+    showDiffPreview(originalCode, editedCode, selection) {
+      // 创建 diff 预览对话框
+      const dialog = document.createElement('div');
+      dialog.className = 'diff-preview-dialog';
+      dialog.innerHTML = `
+        <div class="diff-preview-content">
+          <div class="diff-preview-header">
+            <span>📝 预览更改</span>
+            <button class="diff-preview-close">×</button>
+          </div>
+          <div class="diff-preview-body">
+            <div class="diff-preview-section">
+              <div class="diff-label">原始代码:</div>
+              <pre class="diff-code diff-original">${this.escapeHtml(originalCode)}</pre>
+            </div>
+            <div class="diff-preview-section">
+              <div class="diff-label">修改后:</div>
+              <pre class="diff-code diff-edited">${this.escapeHtml(editedCode)}</pre>
+            </div>
+          </div>
+          <div class="diff-preview-actions">
+            <button class="diff-reject">拒绝 (Esc)</button>
+            <button class="diff-accept">接受 (Enter)</button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const acceptBtn = dialog.querySelector('.diff-accept');
+      const rejectBtn = dialog.querySelector('.diff-reject');
+      const closeBtn = dialog.querySelector('.diff-preview-close');
+
+      // 关闭对话框
+      const closeDialog = () => {
+        dialog.remove();
+      };
+
+      // 接受更改
+      const acceptChanges = () => {
+        const editor = this.editor.editor;
+        editor.executeEdits('inline-edit', [{
+          range: selection,
+          text: editedCode
+        }]);
+        closeDialog();
+        toast.show('✅ 已应用更改', 'success');
+      };
+
+      // 拒绝更改
+      const rejectChanges = () => {
+        closeDialog();
+        toast.show('❌ 已拒绝更改', 'info');
+      };
+
+      // 绑定事件
+      acceptBtn.addEventListener('click', acceptChanges);
+      rejectBtn.addEventListener('click', rejectChanges);
+      closeBtn.addEventListener('click', rejectChanges);
+
+      // 键盘快捷键
+      const keyHandler = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          acceptChanges();
+          document.removeEventListener('keydown', keyHandler);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          rejectChanges();
+          document.removeEventListener('keydown', keyHandler);
+        }
+      };
+      document.addEventListener('keydown', keyHandler);
+
+      // 点击外部关闭
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+          rejectChanges();
+          document.removeEventListener('keydown', keyHandler);
+        }
+      });
+    }
+
+    /**
+     * HTML 转义
+     */
+    escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ==================== 智能代码补全 ====================
+
+    /**
+     * 设置代码补全
+     */
+    setupCodeCompletion() {
+      if (!this.editor || !this.editor.editor) return;
+
+      this.completionState = {
+        isShowing: false,
+        suggestion: null,
+        decorations: [],
+        typingTimer: null,
+        lastTriggerPosition: null
+      };
+
+      // 监听内容变化
+      this.editor.editor.onDidChangeModelContent((e) => {
+        this.handleContentChange(e);
+      });
+
+      // 监听键盘事件
+      this.editor.editor.onKeyDown((e) => {
+        this.handleCompletionKeyDown(e);
+      });
+    }
+
+    /**
+     * 处理内容变化
+     */
+    handleContentChange(e) {
+      // 清除之前的定时器
+      if (this.completionState.typingTimer) {
+        clearTimeout(this.completionState.typingTimer);
+      }
+
+      // 如果正在显示补全，先清除
+      if (this.completionState.isShowing) {
+        this.clearCompletion();
+      }
+
+      // 检查是否应该触发补全
+      const editor = this.editor.editor;
+      const position = editor.getPosition();
+      const model = editor.getModel();
+      
+      if (!position || !model) return;
+
+      // 获取当前行内容
+      const lineContent = model.getLineContent(position.lineNumber);
+      const textBeforeCursor = lineContent.substring(0, position.column - 1);
+
+      // 触发条件：
+      // 1. 至少输入了一些字符
+      // 2. 不是空格或特殊字符结尾
+      // 3. Claude 已连接
+      const shouldTrigger = textBeforeCursor.length > 2 && 
+                           /[a-zA-Z0-9_]$/.test(textBeforeCursor) &&
+                           this.claudeConnected;
+
+      if (shouldTrigger) {
+        // 延迟触发补全（停止输入 800ms 后）
+        this.completionState.typingTimer = setTimeout(() => {
+          this.triggerCompletion(position);
+        }, 800);
+      }
+    }
+
+    /**
+     * 触发代码补全
+     */
+    async triggerCompletion(position) {
+      try {
+        const editor = this.editor.editor;
+        const model = editor.getModel();
+        
+        if (!model) return;
+
+        // 记录触发位置
+        this.completionState.lastTriggerPosition = position;
+
+        // 获取上下文
+        const lineContent = model.getLineContent(position.lineNumber);
+        const textBeforeCursor = lineContent.substring(0, position.column - 1);
+        const textAfterCursor = lineContent.substring(position.column - 1);
+
+        // 获取前几行代码作为上下文
+        const startLine = Math.max(1, position.lineNumber - 10);
+        const contextBefore = model.getValueInRange({
+          startLineNumber: startLine,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column
+        });
+
+        // 构建提示词
+        const context = this.contextManager.getCurrentContext();
+        const prompt = `请为以下代码提供智能补全。只返回应该补全的代码片段，不要包含任何解释或标记。
+
+文件类型: ${context.language}
+当前行前的代码:
+${textBeforeCursor}
+
+补全内容:`;
+
+        // 发送到 Claude（简短版本，适合快速补全）
+        const response = await window.electronAPI.claude.sendMessage(prompt, {
+          maxTokens: 256,
+          temperature: 0.3 // 降低随机性，获得更确定的补全
+        });
+
+        if (!response) return;
+
+        // 提取补全内容
+        const completion = this.extractCompletion(response, textBeforeCursor);
+
+        if (completion && completion.trim()) {
+          // 显示补全建议
+          this.showCompletion(completion, position);
+        }
+
+      } catch (error) {
+        console.error('代码补全失败:', error);
+        // 静默失败，不打扰用户
+      }
+    }
+
+    /**
+     * 提取补全内容
+     */
+    extractCompletion(response, textBeforeCursor) {
+      // 清理响应
+      let completion = response.trim();
+      
+      // 移除代码块标记
+      completion = completion.replace(/^```[\w]*\n?/gm, '');
+      completion = completion.replace(/\n?```$/gm, '');
+      
+      // 移除可能的重复前缀
+      const lastWord = textBeforeCursor.split(/\s+/).pop();
+      if (lastWord && completion.startsWith(lastWord)) {
+        completion = completion.substring(lastWord.length);
+      }
+      
+      return completion;
+    }
+
+    /**
+     * 显示补全建议（幽灵文本）
+     */
+    showCompletion(suggestion, position) {
+      const editor = this.editor.editor;
+      
+      // 创建装饰（灰色幽灵文本）
+      const decorations = editor.deltaDecorations(
+        this.completionState.decorations,
+        [
+          {
+            range: {
+              startLineNumber: position.lineNumber,
+              startColumn: position.column,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column
+            },
+            options: {
+              after: {
+                content: suggestion.split('\n')[0], // 只显示第一行
+                inlineClassName: 'ghost-text-suggestion'
+              }
+            }
+          }
+        ]
+      );
+
+      this.completionState.isShowing = true;
+      this.completionState.suggestion = suggestion;
+      this.completionState.decorations = decorations;
+
+      // 显示提示：按 Tab 接受
+      // 使用状态栏或轻微提示
+    }
+
+    /**
+     * 清除补全建议
+     */
+    clearCompletion() {
+      if (!this.editor || !this.editor.editor) return;
+
+      const editor = this.editor.editor;
+      
+      if (this.completionState.decorations.length > 0) {
+        editor.deltaDecorations(this.completionState.decorations, []);
+      }
+
+      this.completionState.isShowing = false;
+      this.completionState.suggestion = null;
+      this.completionState.decorations = [];
+    }
+
+    /**
+     * 接受补全建议
+     */
+    acceptCompletion() {
+      if (!this.completionState.isShowing || !this.completionState.suggestion) return;
+
+      const editor = this.editor.editor;
+      const position = editor.getPosition();
+      
+      if (!position) return;
+
+      // 插入补全内容
+      editor.executeEdits('accept-completion', [
+        {
+          range: {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column
+          },
+          text: this.completionState.suggestion
+        }
+      ]);
+
+      // 清除补全状态
+      this.clearCompletion();
+    }
+
+    /**
+     * 处理补全相关的键盘事件
+     */
+    handleCompletionKeyDown(e) {
+      // Tab 键 - 接受补全
+      if (e.keyCode === 2 && this.completionState.isShowing) { // 2 = Tab
+        e.preventDefault();
+        this.acceptCompletion();
+        return;
+      }
+
+      // Escape 键 - 取消补全
+      if (e.keyCode === 9 && this.completionState.isShowing) { // 9 = Escape
+        e.preventDefault();
+        this.clearCompletion();
+        return;
+      }
+
+      // 方向键、退格等 - 清除补全
+      if (this.completionState.isShowing) {
+        const clearKeys = [13, 14, 15, 16, 1]; // Left, Up, Right, Down, Backspace
+        if (clearKeys.includes(e.keyCode)) {
+          this.clearCompletion();
+        }
+      }
+    }
+
+    // ==================== 会话管理 ====================
+
+    /**
+     * 显示会话管理对话框
+     */
+    async showSessionsDialog() {
+      const dialog = document.createElement('div');
+      dialog.className = 'settings-dialog';
+      dialog.innerHTML = `
+        <div class="settings-content">
+          <div class="settings-header">
+            <span class="settings-title">📋 会话管理</span>
+            <button class="settings-close">×</button>
+          </div>
+          <div class="settings-body">
+            <div class="loading-state">
+              <div class="loading-spinner"></div>
+              <div>加载会话列表...</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const closeBtn = dialog.querySelector('.settings-close');
+      const settingsBody = dialog.querySelector('.settings-body');
+
+      // 关闭对话框
+      const closeDialog = () => {
+        dialog.remove();
+      };
+
+      closeBtn.addEventListener('click', closeDialog);
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+          closeDialog();
+        }
+      });
+
+      // 加载会话列表
+      try {
+        const result = await window.electronAPI.claude.session.list();
+        
+        if (result.success && result.sessions && result.sessions.length > 0) {
+          // 显示会话列表
+          settingsBody.innerHTML = `
+            <div class="sessions-list" id="sessions-list"></div>
+          `;
+          
+          const sessionsList = document.getElementById('sessions-list');
+          result.sessions.forEach(session => {
+            this.renderSessionItem(sessionsList, session, closeDialog);
+          });
+        } else {
+          // 显示空状态
+          settingsBody.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">📭</div>
+              <div class="empty-state-text">暂无会话记录</div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('加载会话列表失败:', error);
+        settingsBody.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <div class="empty-state-text">加载失败: ${error.message}</div>
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * 渲染会话项
+     */
+    renderSessionItem(container, session, closeDialog) {
+      const sessionItem = document.createElement('div');
+      sessionItem.className = 'session-item';
+      
+      const sessionId = session.id || session.name || 'Unknown';
+      const createdAt = session.created_at || session.createdAt || '未知时间';
+      const lastActive = session.last_active || session.lastActive || '未知';
+      
+      sessionItem.innerHTML = `
+        <div class="session-info">
+          <div class="session-id">${sessionId}</div>
+          <div class="session-meta">
+            <span>创建: ${createdAt}</span>
+            <span>最后活跃: ${lastActive}</span>
+          </div>
+        </div>
+        <div class="session-actions">
+          <button class="session-btn session-btn-restore" data-id="${sessionId}">恢复</button>
+          <button class="session-btn session-btn-delete" data-id="${sessionId}">删除</button>
+        </div>
+      `;
+
+      container.appendChild(sessionItem);
+
+      // 恢复会话
+      const restoreBtn = sessionItem.querySelector('.session-btn-restore');
+      restoreBtn.addEventListener('click', async () => {
+        try {
+          toast.show('⏳ 正在恢复会话...', 'info');
+          const result = await window.electronAPI.claude.session.restore(sessionId);
+          if (result.success) {
+            toast.show('✅ 会话已恢复', 'success');
+            closeDialog();
+          } else {
+            toast.show(`❌ 恢复失败: ${result.error}`, 'error');
+          }
+        } catch (error) {
+          toast.show(`❌ 恢复失败: ${error.message}`, 'error');
+        }
+      });
+
+      // 删除会话
+      const deleteBtn = sessionItem.querySelector('.session-btn-delete');
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`确定要删除会话 "${sessionId}" 吗？`)) return;
+        
+        try {
+          toast.show('⏳ 正在删除会话...', 'info');
+          const result = await window.electronAPI.claude.session.delete(sessionId);
+          if (result.success) {
+            toast.show('✅ 会话已删除', 'success');
+            sessionItem.remove();
+          } else {
+            toast.show(`❌ 删除失败: ${result.error}`, 'error');
+          }
+        } catch (error) {
+          toast.show(`❌ 删除失败: ${error.message}`, 'error');
+        }
+      });
+    }
+
+    // ==================== 对话历史管理 ====================
+
+    /**
+     * 显示对话历史对话框
+     */
+    async showHistoryDialog() {
+      const dialog = document.createElement('div');
+      dialog.className = 'settings-dialog';
+      dialog.innerHTML = `
+        <div class="settings-content" style="width: 700px; max-height: 80vh;">
+          <div class="settings-header">
+            <span class="settings-title">📚 对话历史</span>
+            <button class="settings-close">×</button>
+          </div>
+          <div class="settings-body">
+            <div class="history-controls" style="margin-bottom: 16px; display: flex; gap: 8px;">
+              <input type="text" id="history-search" placeholder="搜索对话..." 
+                     style="flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-dark); color: var(--text);">
+              <button class="sidebar-btn" id="export-all-btn" title="导出所有">📤</button>
+              <button class="sidebar-btn" id="import-btn" title="导入">📥</button>
+              <button class="sidebar-btn" id="clear-all-btn" title="清空">🗑️</button>
+            </div>
+            <div class="loading-state">
+              <div class="loading-spinner"></div>
+              <div>加载对话列表...</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      // 关闭按钮
+      const closeBtn = dialog.querySelector('.settings-close');
+      closeBtn.addEventListener('click', () => dialog.remove());
+
+      // 点击外部关闭
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) dialog.remove();
+      });
+
+      // 加载对话列表
+      try {
+        const result = await window.electronAPI.history.getAll();
+        if (result.success) {
+          this.renderHistoryList(dialog, result.conversations);
+          
+          // 绑定搜索功能
+          const searchInput = dialog.querySelector('#history-search');
+          searchInput.addEventListener('input', async (e) => {
+            const query = e.target.value.trim();
+            if (query) {
+              const searchResult = await window.electronAPI.history.search(query);
+              if (searchResult.success) {
+                this.renderHistoryList(dialog, searchResult.results);
+              }
+            } else {
+              const allResult = await window.electronAPI.history.getAll();
+              if (allResult.success) {
+                this.renderHistoryList(dialog, allResult.conversations);
+              }
+            }
+          });
+
+          // 导出所有按钮
+          const exportAllBtn = dialog.querySelector('#export-all-btn');
+          exportAllBtn.addEventListener('click', async () => {
+            try {
+              const result = await window.electronAPI.history.exportAll();
+              if (result.success && !result.canceled) {
+                toast.show(`✅ 已导出到: ${result.filePath}`, 'success');
+              }
+            } catch (error) {
+              toast.show(`❌ 导出失败: ${error.message}`, 'error');
+            }
+          });
+
+          // 导入按钮
+          const importBtn = dialog.querySelector('#import-btn');
+          importBtn.addEventListener('click', async () => {
+            try {
+              const result = await window.electronAPI.history.import();
+              if (result.success && !result.canceled) {
+                toast.show('✅ 对话已导入', 'success');
+                // 重新加载列表
+                const refreshResult = await window.electronAPI.history.getAll();
+                if (refreshResult.success) {
+                  this.renderHistoryList(dialog, refreshResult.conversations);
+                }
+              }
+            } catch (error) {
+              toast.show(`❌ 导入失败: ${error.message}`, 'error');
+            }
+          });
+
+          // 清空所有按钮
+          const clearAllBtn = dialog.querySelector('#clear-all-btn');
+          clearAllBtn.addEventListener('click', async () => {
+            if (!confirm('确定要清空所有对话历史吗？此操作不可恢复！')) return;
+            try {
+              await window.electronAPI.history.clearAll();
+              toast.show('✅ 已清空所有历史', 'success');
+              this.renderHistoryList(dialog, []);
+            } catch (error) {
+              toast.show(`❌ 清空失败: ${error.message}`, 'error');
+            }
+          });
+        } else {
+          const bodyEl = dialog.querySelector('.settings-body');
+          bodyEl.innerHTML = `<div class="empty-state">加载失败: ${result.error}</div>`;
+        }
+      } catch (error) {
+        const bodyEl = dialog.querySelector('.settings-body');
+        bodyEl.innerHTML = `<div class="empty-state">加载失败: ${error.message}</div>`;
+      }
+    }
+
+    /**
+     * 渲染历史记录列表
+     */
+    renderHistoryList(dialog, conversations) {
+      const bodyEl = dialog.querySelector('.settings-body');
+      const controls = bodyEl.querySelector('.history-controls');
+      
+      if (conversations.length === 0) {
+        bodyEl.innerHTML = '';
+        bodyEl.appendChild(controls);
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = '暂无对话历史';
+        bodyEl.appendChild(empty);
+        return;
+      }
+
+      const listContainer = document.createElement('div');
+      listContainer.className = 'sessions-list';
+      listContainer.style.maxHeight = '60vh';
+      listContainer.style.overflowY = 'auto';
+
+      conversations.forEach(conv => {
+        const item = this.renderHistoryItem(conv);
+        listContainer.appendChild(item);
+      });
+
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(controls);
+      bodyEl.appendChild(listContainer);
+    }
+
+    /**
+     * 渲染单个历史记录项
+     */
+    renderHistoryItem(conversation) {
+      const item = document.createElement('div');
+      item.className = 'session-item';
+      
+      const date = new Date(conversation.timestamp);
+      const formattedDate = date.toLocaleString('zh-CN');
+      const messageCount = conversation.messages.length;
+      
+      item.innerHTML = `
+        <div class="session-info">
+          <div class="session-id">${conversation.title || '无标题对话'}</div>
+          <div class="session-meta">
+            ${formattedDate} • ${messageCount} 条消息
+            ${conversation.context.filePath ? `<br><span style="font-size: 10px; color: var(--text-dim);">📄 ${conversation.context.filePath}</span>` : ''}
+          </div>
+        </div>
+        <div class="session-actions">
+          <button class="session-btn session-btn-restore" title="恢复">📖</button>
+          <button class="session-btn session-btn-export" title="导出">💾</button>
+          <button class="session-btn session-btn-delete" title="删除">🗑️</button>
+        </div>
+      `;
+
+      // 恢复对话
+      const restoreBtn = item.querySelector('.session-btn-restore');
+      restoreBtn.addEventListener('click', async () => {
+        try {
+          const result = await window.electronAPI.history.restore(conversation.id);
+          if (result.success) {
+            // 清空当前聊天
+            const chatMessages = document.getElementById('chat-messages');
+            if (chatMessages) {
+              chatMessages.innerHTML = '';
+            }
+            
+            // 显示历史消息
+            result.conversation.messages.forEach(msg => {
+              this.addMessageToChat(msg.role, msg.content);
+            });
+            
+            this.currentConversationId = conversation.id;
+            toast.show('✅ 对话已恢复', 'success');
+            
+            // 关闭对话框
+            document.querySelector('.settings-dialog').remove();
+          } else {
+            toast.show(`❌ 恢复失败: ${result.error}`, 'error');
+          }
+        } catch (error) {
+          toast.show(`❌ 恢复失败: ${error.message}`, 'error');
+        }
+      });
+
+      // 导出对话
+      const exportBtn = item.querySelector('.session-btn-export');
+      exportBtn.addEventListener('click', async () => {
+        try {
+          const result = await window.electronAPI.history.export(conversation.id);
+          if (result.success && !result.canceled) {
+            toast.show(`✅ 已导出到: ${result.filePath}`, 'success');
+          }
+        } catch (error) {
+          toast.show(`❌ 导出失败: ${error.message}`, 'error');
+        }
+      });
+
+      // 删除对话
+      const deleteBtn = item.querySelector('.session-btn-delete');
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm('确定要删除这条对话吗？')) return;
+        
+        try {
+          const result = await window.electronAPI.history.delete(conversation.id);
+          if (result.success) {
+            toast.show('✅ 对话已删除', 'success');
+            item.remove();
+          } else {
+            toast.show(`❌ 删除失败: ${result.error}`, 'error');
+          }
+        } catch (error) {
+          toast.show(`❌ 删除失败: ${error.message}`, 'error');
+        }
+      });
+
+      return item;
+    }
+
+    // ==================== 模型管理 ====================
+
+    /**
+     * 显示模型选择对话框
+     */
+    async showModelSelectDialog() {
+      const dialog = document.createElement('div');
+      dialog.className = 'settings-dialog';
+      dialog.innerHTML = `
+        <div class="settings-content">
+          <div class="settings-header">
+            <span class="settings-title">⚙️ 选择模型</span>
+            <button class="settings-close">×</button>
+          </div>
+          <div class="settings-body">
+            <div class="loading-state">
+              <div class="loading-spinner"></div>
+              <div>加载模型列表...</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const closeBtn = dialog.querySelector('.settings-close');
+      const settingsBody = dialog.querySelector('.settings-body');
+
+      // 关闭对话框
+      const closeDialog = () => {
+        dialog.remove();
+      };
+
+      closeBtn.addEventListener('click', closeDialog);
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+          closeDialog();
+        }
+      });
+
+      // 加载模型列表和当前模型
+      try {
+        const [modelsResult, currentResult] = await Promise.all([
+          window.electronAPI.claude.model.list(),
+          window.electronAPI.claude.model.current()
+        ]);
+
+        const currentModel = currentResult.success ? currentResult.model : null;
+        
+        if (modelsResult.success && modelsResult.models && modelsResult.models.length > 0) {
+          // 显示模型列表
+          settingsBody.innerHTML = `
+            <div class="models-list" id="models-list"></div>
+          `;
+          
+          const modelsList = document.getElementById('models-list');
+          modelsResult.models.forEach(model => {
+            this.renderModelItem(modelsList, model, currentModel, closeDialog);
+          });
+        } else {
+          settingsBody.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-state-icon">⚠️</div>
+              <div class="empty-state-text">无法加载模型列表</div>
+            </div>
+          `;
+        }
+      } catch (error) {
+        console.error('加载模型列表失败:', error);
+        settingsBody.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">⚠️</div>
+            <div class="empty-state-text">加载失败: ${error.message}</div>
+          </div>
+        `;
+      }
+    }
+
+    /**
+     * 渲染模型项
+     */
+    renderModelItem(container, model, currentModel, closeDialog) {
+      const modelItem = document.createElement('div');
+      const isActive = model.id === currentModel;
+      modelItem.className = `model-item ${isActive ? 'active' : ''}`;
+      
+      const modelName = model.name || model.id;
+      const modelDescription = model.description || '';
+      const modelId = model.id;
+      
+      modelItem.innerHTML = `
+        <div class="model-name">
+          ${modelName}
+          ${isActive ? '<span class="model-badge">当前</span>' : ''}
+        </div>
+        ${modelDescription ? `<div class="model-description">${modelDescription}</div>` : ''}
+        <div class="model-id">${modelId}</div>
+      `;
+
+      container.appendChild(modelItem);
+
+      // 点击选择模型
+      modelItem.addEventListener('click', async () => {
+        if (isActive) return; // 已经是当前模型
+        
+        try {
+          toast.show('⏳ 正在切换模型...', 'info');
+          const result = await window.electronAPI.claude.model.set(modelId);
+          
+          if (result.success) {
+            toast.show(`✅ 已切换到 ${modelName}`, 'success');
+            
+            // 更新所有模型项的状态
+            container.querySelectorAll('.model-item').forEach(item => {
+              item.classList.remove('active');
+              const badge = item.querySelector('.model-badge');
+              if (badge) badge.remove();
+            });
+            
+            // 标记当前选中的模型
+            modelItem.classList.add('active');
+            const nameDiv = modelItem.querySelector('.model-name');
+            if (nameDiv) {
+              nameDiv.innerHTML += '<span class="model-badge">当前</span>';
+            }
+            
+            // 重启 Claude 服务以使用新模型
+            await this.startClaude();
+            
+            setTimeout(() => closeDialog(), 1000);
+          } else {
+            toast.show(`❌ 切换失败: ${result.error}`, 'error');
+          }
+        } catch (error) {
+          toast.show(`❌ 切换失败: ${error.message}`, 'error');
+        }
+      });
+    }
+
+    /**
+     * 显示工作区状态管理对话框
+     */
+    async showWorkspaceStateDialog() {
+      const dialog = document.createElement('div');
+      dialog.className = 'settings-dialog';
+      
+      const savedState = await this.workspaceState.loadState();
+      const hasState = savedState !== null;
+      const stateInfo = hasState ? `
+        <div style="padding: 12px; background: var(--bg-tertiary); border-radius: 6px; margin-bottom: 16px;">
+          <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 8px;">💾 保存的状态信息</div>
+          <div style="font-size: 14px;">
+            <div>📅 保存时间: ${new Date(savedState.timestamp).toLocaleString('zh-CN')}</div>
+            <div>📂 打开标签: ${savedState.editor?.openTabs?.length || 0} 个</div>
+            <div>📏 侧边栏宽度: ${savedState.ui?.sidebarWidth || 250}px</div>
+            <div>🤖 AI 面板: ${savedState.ui?.aiPanelVisible ? '显示' : '隐藏'}</div>
+          </div>
+        </div>
+      ` : '<div style="padding: 12px; text-align: center; color: var(--text-dim);">暂无保存的工作区状态</div>';
+      
+      dialog.innerHTML = `
+        <div class="settings-content" style="width: 500px;">
+          <div class="settings-header">
+            <span class="settings-title">💾 工作区状态管理</span>
+            <button class="settings-close">×</button>
+          </div>
+          <div class="settings-body">
+            ${stateInfo}
+            
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <button class="session-btn" id="save-state-btn" style="width: 100%; padding: 12px; justify-content: center;">
+                💾 立即保存工作区状态
+              </button>
+              
+              <button class="session-btn" id="restore-state-btn" style="width: 100%; padding: 12px; justify-content: center;" ${!hasState ? 'disabled' : ''}>
+                🔄 恢复工作区状态
+              </button>
+              
+              <button class="session-btn" id="clear-state-btn" style="width: 100%; padding: 12px; justify-content: center;" ${!hasState ? 'disabled' : ''}>
+                🗑️ 清除保存的状态
+              </button>
+            </div>
+            
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+              <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.6;">
+                <strong>💡 功能说明：</strong><br>
+                • 自动保存：每30秒自动保存一次<br>
+                • 退出保存：关闭应用时自动保存<br>
+                • 恢复内容：打开的文件、UI布局、面板状态等<br>
+                • 下次启动时将自动恢复您的工作环境
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      // 关闭按钮
+      const closeBtn = dialog.querySelector('.settings-close');
+      const closeDialog = () => dialog.remove();
+      closeBtn.addEventListener('click', closeDialog);
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) closeDialog();
+      });
+
+      // 立即保存按钮
+      const saveBtn = dialog.querySelector('#save-state-btn');
+      saveBtn.addEventListener('click', async () => {
+        // 先收集当前状态，让用户看到
+        const state = this.workspaceState.collectState();
+        const tabCount = state.editor.openTabs.length;
+        
+        console.log('🔍 即将保存的状态:', state);
+        console.log('📂 当前打开标签数:', tabCount);
+        
+        // 如果没有标签，警告用户
+        if (tabCount === 0) {
+          const confirm = window.confirm(
+            '⚠️ 警告：当前没有打开的标签页！\n\n' +
+            '保存空状态会清除之前保存的所有文件。\n\n' +
+            '是否继续保存？'
+          );
+          if (!confirm) {
+            toast.show('❌ 已取消保存', 'info');
+            return;
+          }
+        }
+        
+        const success = await this.workspaceState.saveState();
+        if (success) {
+          toast.show(`✅ 工作区状态已保存 (${tabCount} 个标签)`, 'success');
+          closeDialog();
+        } else {
+          toast.show('❌ 保存失败（可能被保护机制阻止）', 'warning');
+        }
+      });
+
+      // 恢复状态按钮
+      const restoreBtn = dialog.querySelector('#restore-state-btn');
+      if (hasState) {
+        restoreBtn.addEventListener('click', async () => {
+          try {
+            await this.workspaceState.applyState(savedState, this);
+            toast.show('✅ 工作区状态已恢复', 'success');
+            closeDialog();
+          } catch (error) {
+            toast.show('❌ 恢复失败: ' + error.message, 'error');
+          }
+        });
+      }
+
+      // 清除状态按钮
+      const clearBtn = dialog.querySelector('#clear-state-btn');
+      if (hasState) {
+        clearBtn.addEventListener('click', async () => {
+          if (confirm('确定要清除保存的工作区状态吗？')) {
+            const success = await this.workspaceState.clearState();
+            if (success) {
+              toast.show('✅ 工作区状态已清除', 'success');
+              closeDialog();
+            } else {
+              toast.show('❌ 清除失败', 'error');
+            }
+          }
+        });
+      }
     }
   }
 

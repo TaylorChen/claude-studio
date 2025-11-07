@@ -2,14 +2,68 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // 向渲染进程暴露安全的API
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Claude相关操作
-  startClaude: () => ipcRenderer.invoke('start-claude'),
-  sendCommand: (command) => ipcRenderer.invoke('send-command', command),
-  checkClaudeAvailability: () => ipcRenderer.invoke('check-claude-availability'),
-  explainCode: (filePath, selection) => ipcRenderer.invoke('explain-code', filePath, selection),
-  generateCode: (prompt) => ipcRenderer.invoke('generate-code', prompt),
-  runGitCommand: (gitCommand) => ipcRenderer.invoke('run-git-command', gitCommand),
-  getFileStatus: () => ipcRenderer.invoke('get-file-status'),
+  // Claude AI 服务（新版）
+  claude: {
+    start: () => ipcRenderer.invoke('claude:start'),
+    stop: () => ipcRenderer.invoke('claude:stop'),
+    sendMessage: (message, options) => ipcRenderer.invoke('claude:sendMessage', message, options),
+    checkStatus: () => ipcRenderer.invoke('claude:checkStatus'),
+    updateConfig: (config) => ipcRenderer.invoke('claude:updateConfig', config),
+    
+    // 会话管理
+    session: {
+      list: () => ipcRenderer.invoke('claude:session:list'),
+      show: (sessionId) => ipcRenderer.invoke('claude:session:show', sessionId),
+      delete: (sessionId) => ipcRenderer.invoke('claude:session:delete', sessionId),
+      restore: (sessionId) => ipcRenderer.invoke('claude:session:restore', sessionId)
+    },
+    
+    // 模型管理
+    model: {
+      list: () => ipcRenderer.invoke('claude:model:list'),
+      set: (modelId) => ipcRenderer.invoke('claude:model:set', modelId),
+      current: () => ipcRenderer.invoke('claude:model:current')
+    },
+    
+    // 事件监听
+    onConnected: (callback) => {
+      ipcRenderer.on('claude:connected', callback);
+      return () => ipcRenderer.removeListener('claude:connected', callback);
+    },
+    onDisconnected: (callback) => {
+      ipcRenderer.on('claude:disconnected', callback);
+      return () => ipcRenderer.removeListener('claude:disconnected', callback);
+    },
+    onReconnecting: (callback) => {
+      ipcRenderer.on('claude:reconnecting', (event, attempt) => callback(attempt));
+      return () => ipcRenderer.removeListener('claude:reconnecting', callback);
+    },
+    onError: (callback) => {
+      ipcRenderer.on('claude:error', (event, error) => callback(error));
+      return () => ipcRenderer.removeListener('claude:error', callback);
+    },
+    onMessageChunk: (callback) => {
+      ipcRenderer.on('claude:messageChunk', (event, chunk) => callback(chunk));
+      return () => ipcRenderer.removeListener('claude:messageChunk', callback);
+    }
+  },
+
+  // 对话历史管理
+  history: {
+    new: (context) => ipcRenderer.invoke('history:new', context),
+    addMessage: (role, content, metadata) => ipcRenderer.invoke('history:addMessage', role, content, metadata),
+    save: () => ipcRenderer.invoke('history:save'),
+    getAll: () => ipcRenderer.invoke('history:getAll'),
+    getById: (id) => ipcRenderer.invoke('history:getById', id),
+    restore: (id) => ipcRenderer.invoke('history:restore', id),
+    delete: (id) => ipcRenderer.invoke('history:delete', id),
+    search: (query) => ipcRenderer.invoke('history:search', query),
+    export: (id, filePath) => ipcRenderer.invoke('history:export', id, filePath),
+    exportAll: () => ipcRenderer.invoke('history:exportAll'),
+    import: () => ipcRenderer.invoke('history:import'),
+    clearAll: () => ipcRenderer.invoke('history:clearAll'),
+    getStats: () => ipcRenderer.invoke('history:getStats')
+  },
 
   // 文件系统操作
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
@@ -81,6 +135,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onToggleAIPanel: (callback) => {
     ipcRenderer.on('toggle-ai-panel', callback);
     return () => ipcRenderer.removeListener('toggle-ai-panel', callback);
+  },
+
+  // 工作区状态管理
+  workspace: {
+    saveState: (state) => ipcRenderer.invoke('workspace:saveState', state),
+    loadState: () => ipcRenderer.invoke('workspace:loadState'),
+    clearState: () => ipcRenderer.invoke('workspace:clearState')
   },
 
   // 通用事件监听
