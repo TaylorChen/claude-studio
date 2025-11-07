@@ -7,8 +7,23 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, globalShortcut } = require('e
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
-// const pty = require('node-pty');  // 暂时禁用，等待重新编译
 const os = require('os');
+
+// 加载 node-pty（使用预编译版本）
+let pty = null;
+try {
+  // 优先使用预编译版本
+  pty = require('@homebridge/node-pty-prebuilt-multiarch');
+  console.log('✅ 使用预编译的 node-pty');
+} catch (e1) {
+  try {
+    // 回退到标准版本
+    pty = require('node-pty');
+    console.log('✅ 使用标准的 node-pty');
+  } catch (e2) {
+    console.warn('⚠️ node-pty 不可用，终端功能将被禁用');
+  }
+}
 
 // Claude AI 服务
 const ClaudeService = require('./modules/ai/ClaudeService');
@@ -968,38 +983,43 @@ ipcMain.handle('send-command', async (event, command) => {
 
 ipcMain.handle('create-terminal', async (event, terminalId, options) => {
   try {
-    // 暂时禁用终端功能，等待 node-pty 重新编译
-    console.warn('⚠️ 终端功能暂时不可用，需要重新编译 node-pty');
-    return { 
-      success: false, 
-      error: '终端功能暂时不可用。请运行: npm rebuild node-pty' 
-    };
+    // 检查 node-pty 是否可用
+    if (!pty) {
+      return { 
+        success: false, 
+        error: 'node-pty 未编译。\n\n请在终端运行以下命令：\n\n1. 安装编译工具：\n   npm install -g node-gyp\n\n2. 重新编译：\n   npx electron-rebuild -f -w node-pty\n\n或使用预编译版本：\n   npm install @homebridge/node-pty-prebuilt-multiarch' 
+      };
+    }
     
-    /* 原始代码（等待修复）
-    const shell = os.platform() === 'win32' ? 'powershell.exe' : '/bin/zsh';
+    const shell = os.platform() === 'win32' ? 'powershell.exe' : (os.platform() === 'darwin' ? '/bin/zsh' : '/bin/bash');
     
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: options.cols || 80,
       rows: options.rows || 24,
-      cwd: projectDir,
+      cwd: projectDir || process.env.HOME || process.cwd(),
       env: process.env
     });
 
     terminals.set(terminalId, ptyProcess);
 
     ptyProcess.onData((data) => {
-      mainWindow.webContents.send(`terminal-data-${terminalId}`, data);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(`terminal-data-${terminalId}`, data);
+      }
     });
 
     ptyProcess.onExit(() => {
       terminals.delete(terminalId);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(`terminal-exit-${terminalId}`);
+      }
     });
 
+    console.log('✅ 终端创建成功:', terminalId);
     return { success: true };
-    */
   } catch (error) {
-    console.error('创建终端失败:', error);
+    console.error('❌ 创建终端失败:', error);
     return { success: false, error: error.message };
   }
 });

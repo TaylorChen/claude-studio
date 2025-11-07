@@ -130,7 +130,8 @@ body {
 .main-container {
   flex: 1;
   display: flex;
-  overflow: hidden;
+  overflow-x: auto; /* 允许横向滚动，而不是压缩子元素 */
+  overflow-y: hidden;
 }
 
 /* ==================== 可调整大小的分隔条 ==================== */
@@ -145,11 +146,11 @@ body {
 }
 
 .resizer:hover {
-  background: var(--accent-color);
+  background: var(--accent);
 }
 
 .resizer:active {
-  background: var(--accent-color);
+  background: var(--accent);
 }
 
 .resizer::before {
@@ -166,13 +167,14 @@ body {
 
 .sidebar {
   width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width); /* 使用 flex-basis 确保宽度生效 */
   background: var(--bg-secondary);
   border-right: none;
   display: flex;
   flex-direction: column;
   min-width: 200px;
   max-width: 600px;
-  flex-shrink: 0; /* 防止被 flexbox 压缩 */
+  overflow: hidden; /* 防止内容溢出 */
 }
 
 .sidebar-header {
@@ -255,6 +257,9 @@ body {
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  min-height: 0;
+  min-width: 300px; /* 确保编辑器区域不会被完全压缩 */
+  overflow: hidden;
 }
 
 .tabs-bar {
@@ -296,7 +301,7 @@ body {
 .tab.active, .tab-item.active {
   background: var(--bg-primary);
   color: var(--text-primary);
-  border-bottom: 2px solid var(--accent-color);
+  border-bottom: 2px solid var(--accent);
 }
 
 .tab-icon {
@@ -313,7 +318,7 @@ body {
 }
 
 .tab-dirty {
-  color: var(--accent-color);
+  color: var(--accent);
   font-size: 16px;
   line-height: 1;
   flex-shrink: 0;
@@ -337,19 +342,46 @@ body {
 #editor-container {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
+}
+
+.editor-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.horizontal-resizer {
+  height: 4px;
+  background: var(--border-color);
+  cursor: row-resize;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.horizontal-resizer:hover,
+.horizontal-resizer:active {
+  background: var(--accent);
 }
 
 /* ==================== AI 面板 ==================== */
 
 .ai-panel {
   width: var(--ai-panel-width);
+  flex: 0 0 var(--ai-panel-width); /* 使用 flex-basis 确保宽度生效 */
   background: var(--ai-bg);
   border-left: none;
   display: flex;
   flex-direction: column;
   min-width: 300px;
   max-width: 800px;
-  flex-shrink: 0; /* 防止被 flexbox 压缩 */
 }
 
 .ai-header {
@@ -479,11 +511,13 @@ body {
 /* ==================== 终端面板 ==================== */
 
 .terminal-panel {
+  flex: 0 0 var(--terminal-height);
   height: var(--terminal-height);
   background: var(--bg-primary);
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .terminal-header {

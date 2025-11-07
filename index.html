@@ -65,9 +65,28 @@
             <div class="tabs-bar" id="tabs-bar">
                 <!-- 标签页将在这里动态生成 -->
             </div>
-            
-            <!-- Monaco Editor 容器 -->
-            <div id="editor-container"></div>
+
+            <div class="editor-stack">
+                <div class="editor-surface">
+                    <!-- Monaco Editor 容器 -->
+                    <div id="editor-container"></div>
+                </div>
+
+                <div class="horizontal-resizer" id="terminal-resizer"></div>
+
+                <!-- 终端面板 -->
+                <div class="terminal-panel">
+                    <div class="terminal-header">
+                        <div class="terminal-title">终端</div>
+                        <div class="sidebar-actions">
+                            <button class="sidebar-btn" title="新建终端">➕</button>
+                            <button class="sidebar-btn" title="分割终端">⫿</button>
+                            <button class="sidebar-btn" title="清屏">🗑️</button>
+                        </div>
+                    </div>
+                    <div id="terminal-container"></div>
+                </div>
+            </div>
         </div>
 
         <!-- 分隔条：编辑器 | AI 面板 -->
@@ -120,19 +139,6 @@
         </div>
     </div>
 
-    <!-- 底部 - 终端面板 -->
-    <div class="terminal-panel">
-        <div class="terminal-header">
-            <div class="terminal-title">终端</div>
-            <div class="sidebar-actions">
-                <button class="sidebar-btn" title="新建终端">➕</button>
-                <button class="sidebar-btn" title="分割终端">⫿</button>
-                <button class="sidebar-btn" title="清屏">🗑️</button>
-            </div>
-        </div>
-        <div id="terminal-container"></div>
-    </div>
-
     <!-- 状态栏 -->
     <div class="status-bar">
         <div class="status-item">
@@ -154,26 +160,63 @@
         </div>
     </div>
 
-    <!-- 脚本加载 -->
-    <script>
-        console.log('🚀 开始加载脚本...');
-    </script>
+    <!-- xterm CSS -->
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css">
     
     <!-- Monaco Editor 加载器 -->
     <script>
         var require = { paths: { vs: 'node_modules/monaco-editor/min/vs' } };
-        console.log('1️⃣ 配置 Monaco AMD paths');
     </script>
-    <script src="node_modules/monaco-editor/min/vs/loader.js" onload="console.log('2️⃣ Monaco loader.js 已加载')"></script>
+    <script src="node_modules/monaco-editor/min/vs/loader.js"></script>
     
-    <!-- 临时禁用 xterm.js 测试 -->
+    <!-- 加载 xterm.js（解决 AMD 冲突） -->
     <script>
-        console.log('⚠️ xterm.js 暂时禁用以测试 Monaco');
-        console.log('typeof require:', typeof require);
-        console.log('typeof define:', typeof define);
+        (function() {
+            var savedRequire = window.require;
+            var savedDefine = window.define;
+            
+            // 拦截 AMD define 调用并转换为全局变量
+            window.define = function() {
+                var factory = arguments[arguments.length - 1];
+                if (typeof factory === 'function') {
+                    try {
+                        var module = factory();
+                        if (module && module.Terminal) {
+                            window.Terminal = module.Terminal;
+                        } else if (module && module.FitAddon) {
+                            window.FitAddon = module.FitAddon;
+                        }
+                    } catch (e) {
+                        console.error('模块加载失败:', e);
+                    }
+                }
+            };
+            window.define.amd = true;
+            
+            // 加载 xterm 脚本
+            Promise.all([
+                fetch('node_modules/xterm/lib/xterm.js').then(r => r.text()),
+                fetch('node_modules/xterm-addon-fit/lib/xterm-addon-fit.js').then(r => r.text())
+            ]).then(function(scripts) {
+                try {
+                    eval(scripts[0]);
+                    eval(scripts[1]);
+                } catch (e) {
+                    console.error('xterm 加载失败:', e);
+                }
+                
+                // 恢复 AMD 环境
+                window.require = savedRequire;
+                window.define = savedDefine;
+                
+                // 加载 app.js
+                var script = document.createElement('script');
+                script.src = 'src/renderer/app.js';
+                document.body.appendChild(script);
+            }).catch(function(err) {
+                console.error('加载失败:', err);
+            });
+        })();
     </script>
-    
-    <!-- 渲染进程入口 -->
-    <script src="src/renderer/app.js" onload="console.log('3️⃣ app.js 已加载')"></script>
 </body>
 </html>

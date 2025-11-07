@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Electron](https://img.shields.io/badge/electron-27.0.0-blue.svg)
 ![Monaco Editor](https://img.shields.io/badge/monaco--editor-0.44.0-blue.svg)
@@ -300,7 +300,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for gu
 
 See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and updates.
 
-**Latest**: v2.1.0 - Chat History, Error Diagnostics, Workspace Memory
+**Latest**: v2.1.1 - Cursor-Style Layout, Terminal Integration, Panel Resizing
 
 ---
 

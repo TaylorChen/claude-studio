@@ -91,6 +91,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on(channel, (event, data) => callback(data));
     return () => ipcRenderer.removeListener(channel, callback);
   },
+  onTerminalExit: (terminalId, callback) => {
+    const channel = `terminal-exit-${terminalId}`;
+    ipcRenderer.on(channel, callback);
+    return () => ipcRenderer.removeListener(channel, callback);
+  },
   executeTerminalCommand: (command) => ipcRenderer.invoke('execute-terminal-command', command),
 
   // Git操作

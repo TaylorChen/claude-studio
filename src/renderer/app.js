@@ -470,6 +470,157 @@
     }
   }
 
+  // ==================== 终端管理器 ====================
+  class TerminalManager {
+    constructor() {
+      this.terminals = new Map(); // terminalId -> { xterm, fitAddon }
+      this.activeTerminalId = null;
+      this.terminalCounter = 0;
+    }
+
+    async init() {
+      // 等待 xterm 库加载（最多等待 5 秒）
+      let attempts = 0;
+      while (typeof Terminal === 'undefined' && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (typeof Terminal === 'undefined') {
+        console.error('❌ xterm 库加载超时');
+        return false;
+      }
+      
+      console.log('✅ xterm 库已就绪');
+
+      // 创建默认终端
+      await this.createTerminal();
+      return true;
+    }
+
+    async createTerminal() {
+      const terminalId = `terminal-${++this.terminalCounter}`;
+      const container = document.getElementById('terminal-container');
+      
+      if (!container) {
+        console.error('❌ 终端容器不存在');
+        return null;
+      }
+
+      // 创建 xterm 实例
+      const xterm = new Terminal({
+        cursorBlink: true,
+        fontSize: 13,
+        fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", "Courier New", monospace',
+        theme: {
+          background: '#1e1e1e',
+          foreground: '#d4d4d4',
+          cursor: '#ffffff',
+          black: '#000000',
+          red: '#cd3131',
+          green: '#0dbc79',
+          yellow: '#e5e510',
+          blue: '#2472c8',
+          magenta: '#bc3fbc',
+          cyan: '#11a8cd',
+          white: '#e5e5e5',
+          brightBlack: '#666666',
+          brightRed: '#f14c4c',
+          brightGreen: '#23d18b',
+          brightYellow: '#f5f543',
+          brightBlue: '#3b8eea',
+          brightMagenta: '#d670d6',
+          brightCyan: '#29b8db',
+          brightWhite: '#e5e5e5'
+        },
+        scrollback: 1000,
+        allowTransparency: false
+      });
+
+      // 创建 fit addon
+      const fitAddon = new FitAddon();
+      xterm.loadAddon(fitAddon);
+
+      // 清空容器并挂载
+      container.innerHTML = '';
+      xterm.open(container);
+      
+      // 调整大小以适应容器
+      setTimeout(() => {
+        fitAddon.fit();
+      }, 0);
+
+      // 监听窗口大小变化
+      const resizeObserver = new ResizeObserver(() => {
+        fitAddon.fit();
+        this.resizeTerminalPty(terminalId, xterm.cols, xterm.rows);
+      });
+      resizeObserver.observe(container);
+
+      // 保存终端实例
+      this.terminals.set(terminalId, {
+        xterm,
+        fitAddon,
+        resizeObserver
+      });
+      this.activeTerminalId = terminalId;
+
+      // 通知主进程创建 PTY
+      const result = await window.electronAPI.createTerminal(terminalId, {
+        cols: xterm.cols,
+        rows: xterm.rows
+      });
+
+      if (!result.success) {
+        console.error('❌ 创建终端失败:', result.error);
+        xterm.writeln('\x1b[1;31m终端创建失败: ' + result.error + '\x1b[0m');
+        return null;
+      }
+
+      // 监听来自主进程的数据
+      window.electronAPI.onTerminalData(terminalId, (data) => {
+        xterm.write(data);
+      });
+
+      window.electronAPI.onTerminalExit(terminalId, () => {
+        xterm.writeln('\r\n\x1b[1;33m终端进程已退出\x1b[0m');
+      });
+
+      // 监听用户输入
+      xterm.onData((data) => {
+        window.electronAPI.writeToTerminal(terminalId, data);
+      });
+
+      console.log('✅ 终端创建成功:', terminalId);
+      return terminalId;
+    }
+
+    async resizeTerminalPty(terminalId, cols, rows) {
+      if (window.electronAPI && window.electronAPI.resizeTerminal) {
+        await window.electronAPI.resizeTerminal(terminalId, cols, rows);
+      }
+    }
+
+    async closeTerminal(terminalId) {
+      const terminal = this.terminals.get(terminalId);
+      if (terminal) {
+        terminal.resizeObserver.disconnect();
+        terminal.xterm.dispose();
+        this.terminals.delete(terminalId);
+        
+        if (window.electronAPI && window.electronAPI.closeTerminal) {
+          await window.electronAPI.closeTerminal(terminalId);
+        }
+      }
+    }
+
+    async closeAllTerminals() {
+      for (const terminalId of this.terminals.keys()) {
+        await this.closeTerminal(terminalId);
+      }
+    }
+  }
+
   // ==================== 文件管理器 ====================
   class FileManager {
     constructor() {
@@ -712,7 +863,13 @@
       this.currentResizer = null;
       this.startX = 0;
       this.startWidth = 0;
+      this.startY = 0;
+      this.startHeight = 0;
       this.targetElement = null;
+      this.dimension = null;
+      this.minSize = 0;
+      this.maxSize = Infinity;
+      this.moveCount = 0;
     }
 
     init() {
@@ -727,26 +884,71 @@
       const aiResizer = document.getElementById('ai-resizer');
       const aiPanel = document.querySelector('.ai-panel');
       if (aiResizer && aiPanel) {
+        console.log('✅ AI 面板 Resizer 初始化成功', {
+          resizer: aiResizer.id,
+          panel: aiPanel.className,
+          initialWidth: aiPanel.getBoundingClientRect().width
+        });
         this.setupResizer(aiResizer, aiPanel, 'width');
+      } else {
+        console.error('❌ AI 面板 Resizer 初始化失败', {
+          hasResizer: !!aiResizer,
+          hasPanel: !!aiPanel
+        });
+      }
+
+      // 初始化终端高度调整器
+      const terminalResizer = document.getElementById('terminal-resizer');
+      const terminalPanel = document.querySelector('.terminal-panel');
+      if (terminalResizer && terminalPanel) {
+        this.setupResizer(terminalResizer, terminalPanel, 'height', { min: 120, max: 600 });
       }
     }
 
-    setupResizer(resizer, targetElement, dimension) {
+    setupResizer(resizer, targetElement, dimension = 'width', options = {}) {
       resizer.addEventListener('mousedown', (e) => {
-        this.startResize(e, resizer, targetElement, dimension);
+        console.log('🖱️ Resizer mousedown 事件触发', {
+          resizerId: resizer.id,
+          targetClass: targetElement.className,
+          dimension: dimension
+        });
+        this.startResize(e, resizer, targetElement, dimension, options);
       });
     }
 
-    startResize(e, resizer, targetElement, dimension) {
+    startResize(e, resizer, targetElement, dimension, options = {}) {
       e.preventDefault();
       this.isResizing = true;
       this.currentResizer = resizer;
       this.targetElement = targetElement;
-      this.startX = e.clientX;
-      
-      // 获取当前宽度
-      const rect = targetElement.getBoundingClientRect();
-      this.startWidth = rect.width;
+      this.dimension = dimension;
+
+      if (dimension === 'width') {
+        this.startX = e.clientX;
+        const rect = targetElement.getBoundingClientRect();
+        this.startWidth = rect.width;
+
+        const computed = getComputedStyle(this.targetElement);
+        const defaultMin = parseInt(computed.minWidth) || 200;
+        const defaultMax = parseInt(computed.maxWidth) || 800;
+        this.minSize = options.min ?? defaultMin;
+        this.maxSize = options.max ?? defaultMax;
+        
+        console.log('🎯 开始宽度调整', {
+          element: targetElement.className.split(' ')[0],
+          startX: this.startX,
+          startWidth: this.startWidth,
+          minSize: this.minSize,
+          maxSize: this.maxSize,
+          cssVariable: targetElement.classList.contains('ai-panel') ? '--ai-panel-width' : '--sidebar-width'
+        });
+      } else {
+        this.startY = e.clientY;
+        const rect = targetElement.getBoundingClientRect();
+        this.startHeight = rect.height;
+        this.minSize = options.min ?? 120;
+        this.maxSize = options.max ?? 600;
+      }
       
       // 添加全局事件监听器
       document.addEventListener('mousemove', this.handleMouseMove);
@@ -754,47 +956,137 @@
       
       // 添加不可选择的样式（防止文本被选中）
       document.body.style.userSelect = 'none';
-      document.body.style.cursor = 'col-resize';
+      document.body.style.cursor = dimension === 'height' ? 'row-resize' : 'col-resize';
     }
 
     handleMouseMove = (e) => {
       if (!this.isResizing || !this.targetElement) return;
       
-      const deltaX = e.clientX - this.startX;
-      let newWidth;
-      
-      // 判断是左侧还是右侧元素
-      if (this.targetElement.classList.contains('ai-panel')) {
-        // AI 面板在右侧，向左拖动增加宽度
-        newWidth = this.startWidth - deltaX;
-      } else {
-        // 侧边栏在左侧，向右拖动增加宽度
-        newWidth = this.startWidth + deltaX;
-      }
-      
-      // 获取最小和最大宽度
-      const minWidth = parseInt(getComputedStyle(this.targetElement).minWidth) || 200;
-      const maxWidth = parseInt(getComputedStyle(this.targetElement).maxWidth) || 800;
-      
-      // 限制宽度范围
-      newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-      
-      // 应用新宽度（通过 CSS 变量）
-      if (this.targetElement.classList.contains('sidebar')) {
-        document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
-        store.setState('ui.sidebarWidth', newWidth);
-      } else if (this.targetElement.classList.contains('ai-panel')) {
-        document.documentElement.style.setProperty('--ai-panel-width', `${newWidth}px`);
-        store.setState('ui.aiPanelWidth', newWidth);
+      if (this.dimension === 'width') {
+        const deltaX = e.clientX - this.startX;
+        let newWidth;
+        let calculatedWidth;
+
+        if (this.targetElement.classList.contains('ai-panel')) {
+          calculatedWidth = this.startWidth - deltaX;
+          newWidth = calculatedWidth;
+          
+          // 每 50 次移动输出一次日志，避免日志过多
+          if (!this._logCounter) this._logCounter = 0;
+          if (this._logCounter % 50 === 0) {
+            console.log('📏 AI 面板宽度调整中', {
+              currentX: e.clientX,
+              startX: this.startX,
+              deltaX: deltaX,
+              direction: deltaX < 0 ? '← 向左(变大)' : '→ 向右(变小)',
+              startWidth: this.startWidth,
+              calculatedWidth: calculatedWidth,
+              beforeClamp: newWidth
+            });
+          }
+          this._logCounter++;
+        } else {
+          newWidth = this.startWidth + deltaX;
+        }
+
+        const beforeClamp = newWidth;
+        newWidth = Math.max(this.minSize, Math.min(this.maxSize, newWidth));
+        
+        if (beforeClamp !== newWidth && this.targetElement.classList.contains('ai-panel')) {
+          console.log('⚠️ 宽度被边界限制', {
+            beforeClamp: beforeClamp,
+            afterClamp: newWidth,
+            minSize: this.minSize,
+            maxSize: this.maxSize,
+            hitMin: beforeClamp < this.minSize,
+            hitMax: beforeClamp > this.maxSize
+          });
+        }
+
+        if (this.targetElement.classList.contains('sidebar')) {
+          document.documentElement.style.setProperty('--sidebar-width', `${newWidth}px`);
+          
+          // 强制更新元素的 flex-basis（直接设置内联样式）
+          this.targetElement.style.flexBasis = `${newWidth}px`;
+          this.targetElement.style.width = `${newWidth}px`;
+          
+          store.setState('ui.sidebarWidth', newWidth);
+        } else if (this.targetElement.classList.contains('ai-panel')) {
+          document.documentElement.style.setProperty('--ai-panel-width', `${newWidth}px`);
+          
+          // 强制更新元素的 flex-basis（直接设置内联样式）
+          this.targetElement.style.flexBasis = `${newWidth}px`;
+          this.targetElement.style.width = `${newWidth}px`;
+          
+          // 强制浏览器重绘
+          void this.targetElement.offsetWidth;
+          
+          store.setState('ui.aiPanelWidth', newWidth);
+          
+          // 验证 CSS 变量是否设置成功
+          const cssVarValue = getComputedStyle(document.documentElement).getPropertyValue('--ai-panel-width');
+          const actualWidth = this.targetElement.getBoundingClientRect().width;
+          const computedWidth = getComputedStyle(this.targetElement).width;
+          
+          if (this._logCounter % 50 === 0) {
+            console.log('🔍 CSS 变量验证', {
+              setCSSVar: `${newWidth}px`,
+              getCSSVar: cssVarValue.trim(),
+              actualWidth: actualWidth,
+              computedWidth: computedWidth,
+              inlineStyle: this.targetElement.style.flexBasis,
+              match: actualWidth === newWidth
+            });
+          }
+        }
+      } else if (this.dimension === 'height') {
+        const deltaY = e.clientY - this.startY;
+        let newHeight = this.startHeight - deltaY;
+        newHeight = Math.max(this.minSize, Math.min(this.maxSize, newHeight));
+        document.documentElement.style.setProperty('--terminal-height', `${newHeight}px`);
+        store.setState('ui.terminalHeight', newHeight);
       }
     }
 
     handleMouseUp = () => {
       if (!this.isResizing) return;
       
+      const wasAIPanel = this.targetElement && this.targetElement.classList.contains('ai-panel');
+      const finalWidth = wasAIPanel ? this.targetElement.getBoundingClientRect().width : null;
+      
+      if (wasAIPanel) {
+        const cssVarValue = getComputedStyle(document.documentElement).getPropertyValue('--ai-panel-width');
+        const computedWidth = getComputedStyle(this.targetElement).width;
+        const computedFlexBasis = getComputedStyle(this.targetElement).flexBasis;
+        const inlineWidth = this.targetElement.style.width;
+        const inlineFlexBasis = this.targetElement.style.flexBasis;
+        
+        console.log('✅ AI 面板宽度调整完成', {
+          finalWidth: finalWidth,
+          totalMoves: this._logCounter || 0,
+          cssVariable: cssVarValue.trim(),
+          computedWidth: computedWidth,
+          computedFlexBasis: computedFlexBasis,
+          inlineWidth: inlineWidth,
+          inlineFlexBasis: inlineFlexBasis,
+          match: Math.abs(finalWidth - parseFloat(computedWidth)) < 1
+        });
+        
+        // 额外验证：检查元素的实际渲染尺寸
+        console.log('🔬 深度验证', {
+          getBoundingClientRect: this.targetElement.getBoundingClientRect(),
+          offsetWidth: this.targetElement.offsetWidth,
+          clientWidth: this.targetElement.clientWidth,
+          scrollWidth: this.targetElement.scrollWidth
+        });
+        
+        this._logCounter = 0;
+      }
+      
       this.isResizing = false;
       this.currentResizer = null;
       this.targetElement = null;
+      this.dimension = null;
       this.moveCount = 0;
       
       // 移除全局事件监听器
@@ -1086,6 +1378,7 @@
       this.editor = null;
       this.ai = null;
       this.files = null;
+      this.terminal = null;
       this.resizer = null;
       this.contextManager = null;
       this.errorDiagnostics = null;
@@ -1094,6 +1387,7 @@
       this.claudeReconnecting = false;
       this.initialized = false;
       this.currentConversationId = null;
+      this.lastTerminalHeight = store.getState('ui.terminalHeight') || 200;
     }
 
     async init() {
@@ -1108,6 +1402,7 @@
         this.editor = new EditorManager();
         this.ai = new AIService();
         this.files = new FileManager();
+        this.terminal = new TerminalManager();
         this.resizer = new ResizerManager();
         this.contextManager = new ContextManager(this.editor);
 
@@ -1130,6 +1425,16 @@
 
         // 初始化可调整大小的分隔条
         this.resizer.init();
+
+        // 初始化终端
+        await this.terminal.init();
+
+        const initialTerminalHeight = store.getState('ui.terminalHeight');
+        if (typeof initialTerminalHeight === 'number') {
+          document.documentElement.style.setProperty('--terminal-height', `${initialTerminalHeight}px`);
+          this.lastTerminalHeight = initialTerminalHeight;
+        }
+        this.updateTerminalVisibility(store.getState('ui.terminalVisible'));
 
         // 绑定事件
         this.bindEvents();
@@ -1299,7 +1604,22 @@
       const toggleTerminal = document.getElementById('toggle-terminal');
       if (toggleTerminal) {
         toggleTerminal.addEventListener('click', () => {
-          toast.show('终端功能需要重新编译 node-pty 模块', 'warning', 2000);
+          const visible = store.getState('ui.terminalVisible');
+          if (visible) {
+            const currentHeight = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--terminal-height'), 10);
+            if (!Number.isNaN(currentHeight)) {
+              this.lastTerminalHeight = currentHeight;
+            }
+            store.setState('ui.terminalVisible', false);
+            toast.show('终端已隐藏', 'info', 1500);
+          } else {
+            if (typeof this.lastTerminalHeight === 'number') {
+              document.documentElement.style.setProperty('--terminal-height', `${this.lastTerminalHeight}px`);
+              store.setState('ui.terminalHeight', this.lastTerminalHeight);
+            }
+            store.setState('ui.terminalVisible', true);
+            toast.show('终端已打开', 'info', 1500);
+          }
         });
       }
 
@@ -1384,6 +1704,12 @@
         const aiPanel = document.querySelector('.ai-panel');
         const aiResizer = document.getElementById('ai-resizer');
         
+        console.log('👁️ AI 面板可见性变化', {
+          visible: visible,
+          hasPanel: !!aiPanel,
+          hasResizer: !!aiResizer,
+          currentWidth: aiPanel ? aiPanel.getBoundingClientRect().width : null
+        });
         
         if (aiPanel) {
           if (visible) {
@@ -1396,6 +1722,18 @@
         }
       });
 
+      // 监听终端显示状态
+      store.subscribe('ui.terminalVisible', (visible) => {
+        this.updateTerminalVisibility(visible);
+      });
+
+      // 监听终端高度
+      store.subscribe('ui.terminalHeight', (height) => {
+        if (typeof height === 'number') {
+          document.documentElement.style.setProperty('--terminal-height', `${height}px`);
+        }
+      });
+
       // 监听 AI 处理状态
       store.subscribe('ai.isProcessing', (isProcessing) => {
         const sendBtn = document.getElementById('send-chat-btn');
@@ -1405,6 +1743,25 @@
         }
       });
 
+    }
+
+    updateTerminalVisibility(visible) {
+      const terminalPanel = document.querySelector('.terminal-panel');
+      const terminalResizer = document.getElementById('terminal-resizer');
+
+      if (!terminalPanel || !terminalResizer) return;
+
+      if (visible) {
+        terminalPanel.classList.remove('hidden');
+        terminalPanel.style.display = 'flex';
+        terminalResizer.classList.remove('hidden');
+        terminalResizer.style.display = '';
+      } else {
+        terminalPanel.classList.add('hidden');
+        terminalPanel.style.display = 'none';
+        terminalResizer.classList.add('hidden');
+        terminalResizer.style.display = 'none';
+      }
     }
 
     toggleAIPanel() {

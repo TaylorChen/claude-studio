@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.1] - 2025-11-08
+
+### 🎨 UI/UX Improvements
+
+#### ✨ Added
+
+**Cursor-Style Layout**
+- 三面板布局（侧边栏、编辑器、AI 助手）
+- 所有面板支持拖拽调整宽度
+- 终端面板支持垂直分割（编辑器上方、终端下方）
+- 面板宽度和高度自动保存和恢复
+- 平滑的调整动画和视觉反馈
+
+**Terminal 功能完善**
+- 集成 xterm.js 终端模拟器
+- node-pty 后端支持真实 shell 进程
+- 自动检测系统 shell（zsh/bash/PowerShell）
+- 终端大小自动适配容器
+- 支持终端输入输出交互
+- 终端面板可拖拽调整高度
+
+#### 🔧 Changed
+
+**面板调整优化**
+- 修复 AI 面板只能缩小不能放大的问题
+- 修复侧边栏在 AI 面板打开时被隐藏的问题
+- 使用 `flex-basis` 替代 `width` 确保 flexbox 布局正确
+- 添加强制重绘机制确保视觉更新
+- 优化面板最小/最大宽度限制
+
+**模块加载优化**
+- 解决 Monaco Editor 和 xterm.js 的 AMD 冲突
+- 使用 define 拦截器转换 UMD 模块为全局变量
+- 优化脚本加载顺序和时机
+- 移除所有调试日志，提升性能
+
+#### 🐛 Fixed
+
+**布局修复**
+- 修复 AI 面板调整宽度不生效的问题
+- 修复侧边栏被压缩消失的问题
+- 修复终端面板高度调整问题
+- 修复 flexbox 渲染延迟问题
+
+**Terminal 修复**
+- 修复 node-pty 编译问题（提供预编译版本回退）
+- 修复 xterm.js AMD 模块冲突
+- 修复 FitAddon 构造函数调用错误
+- 修复终端大小自动适配问题
+
+#### 📊 Statistics
+
+- 修改文件: 5 个（index.html, app.js, main.css, main.js, preload.js）
+- 新增代码: ~500 行
+- 修复 Bug: 8 个
+- 优化项: 10+
+- 删除临时文件: 18 个
+
+---
+
 ## [2.1.0] - 2025-11-07
 
 ### 🚀 Major Update - Advanced AI Features
