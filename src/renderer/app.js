@@ -813,6 +813,14 @@
           }
         });
 
+        // 右键菜单事件
+        item.addEventListener('contextmenu', (e) => {
+          console.log('🖱️ 右键点击文件树项目:', node.name);
+          e.preventDefault();
+          e.stopPropagation();
+          this.showContextMenu(e, node);
+        });
+
         container.appendChild(item);
 
         // 如果是展开的目录或根节点，递归渲染子节点
@@ -852,6 +860,389 @@
       // 使用保存的根容器引用
       if (this.treeContainer) {
         this.renderTree(this.treeContainer, this.fileTree, 0);
+      }
+    }
+
+    /**
+     * 显示右键菜单
+     */
+    showContextMenu(event, node) {
+      console.log('📋 显示右键菜单，节点类型:', node.type, '路径:', node.path);
+      
+      // 移除之前的菜单
+      const existingMenu = document.getElementById('file-context-menu');
+      if (existingMenu) {
+        existingMenu.remove();
+      }
+
+      // 只对文件显示完整菜单
+      if (node.type === 'directory' || node.isRoot) {
+        console.log('⚠️ 目录不显示菜单，跳过');
+        return;
+      }
+
+      // 创建菜单容器
+      const menu = document.createElement('div');
+      menu.id = 'file-context-menu';
+      menu.className = 'context-menu';
+      menu.style.cssText = `
+        position: fixed;
+        left: ${event.pageX}px;
+        top: ${event.pageY}px;
+        background: var(--bg-tertiary, #2d2d30);
+        border: 1px solid var(--border-color, #3e3e42);
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        z-index: 10000;
+        min-width: 220px;
+        padding: 8px 0;
+      `;
+
+      // 菜单项数据
+      const menuItems = [
+        {
+          label: 'Add File to Claude Chat',
+          icon: '💬',
+          action: () => this.addToClaudeChat(node, false),
+          className: 'menu-item-claude'
+        },
+        {
+          label: 'Add File to New Claude Chat',
+          icon: '✨',
+          action: () => this.addToClaudeChat(node, true),
+          className: 'menu-item-claude'
+        },
+        { divider: true },
+        {
+          label: 'Add as Attachment',
+          icon: '📎',
+          action: () => this.addFileAsAttachment(node),
+          className: 'menu-item-attachment'
+        },
+        {
+          label: 'Add as Attachment (New Chat)',
+          icon: '📎✨',
+          action: () => this.addFileAsAttachmentNew(node),
+          className: 'menu-item-attachment'
+        },
+        {
+          label: 'Add as Image Attachment',
+          icon: '🖼️',
+          action: () => this.addFileAsAttachmentImage(node),
+          className: 'menu-item-attachment'
+        },
+        { divider: true },
+        {
+          label: 'Copy Path',
+          icon: '📋',
+          action: () => this.copyPath(node.path)
+        },
+        {
+          label: 'Copy Relative Path',
+          icon: '📌',
+          action: () => this.copyRelativePath(node.path)
+        },
+        { divider: true },
+        {
+          label: 'Reveal in Finder',
+          icon: '📂',
+          action: () => this.revealInFinder(node.path)
+        }
+      ];
+
+      // 创建菜单项
+      menuItems.forEach((item) => {
+        if (item.divider) {
+          const divider = document.createElement('div');
+          divider.style.cssText = `
+            height: 1px;
+            background: var(--border-color, #3e3e42);
+            margin: 4px 0;
+          `;
+          menu.appendChild(divider);
+        } else {
+          const menuItem = document.createElement('div');
+          menuItem.className = `menu-item ${item.className || ''}`;
+          menuItem.style.cssText = `
+            padding: 8px 12px;
+            cursor: pointer;
+            color: var(--text-primary, #cccccc);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            transition: background 0.15s ease;
+            user-select: none;
+          `;
+
+          menuItem.innerHTML = `
+            <span style="font-size: 14px;">${item.icon}</span>
+            <span>${item.label}</span>
+          `;
+
+          menuItem.addEventListener('mouseenter', () => {
+            menuItem.style.background = 'var(--bg-hover, #2a2d2e)';
+          });
+
+          menuItem.addEventListener('mouseleave', () => {
+            menuItem.style.background = 'transparent';
+          });
+
+          menuItem.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('✅ 点击菜单项:', item.label);
+            item.action();
+            menu.remove();
+          });
+
+          menu.appendChild(menuItem);
+        }
+      });
+
+      console.log('✅ 菜单已创建，共 ' + menuItems.length + ' 项');
+      console.log('📍 菜单位置: x=' + event.pageX + ', y=' + event.pageY);
+      document.body.appendChild(menu);
+      console.log('✅ 菜单已添加到 DOM');
+
+      // 点击其他地方关闭菜单
+      const closeMenu = (e) => {
+        if (!menu.contains(e.target)) {
+          menu.remove();
+          document.removeEventListener('click', closeMenu);
+        }
+      };
+
+      setTimeout(() => {
+        document.addEventListener('click', closeMenu);
+      }, 0);
+    }
+
+    /**
+     * 添加文件到 Claude 聊天
+     */
+    async addToClaudeChat(node, isNew) {
+      try {
+        console.log('📂 开始添加文件到 Claude 聊天, isNew=' + isNew);
+        
+        // 确保 AI 聊天组件已初始化
+        if (!window.aiChat) {
+          console.log('⚠️ AI 聊天组件未初始化，正在初始化...');
+          
+          // 尝试通过 window.studio 获取 app 实例
+          if (window.studio && typeof window.studio.toggleAIPanel === 'function') {
+            // 调用 toggleAIPanel 来初始化 AI 聊天
+            window.studio.toggleAIPanel();
+            
+            // 等待初始化完成
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+
+        // 再次检查
+        if (!window.aiChat) {
+          console.error('❌ Claude Chat Component not found. Make sure AI Chat is initialized.');
+          alert('Claude Chat Component not found. Please open the AI Chat panel first (Cmd+Shift+L).');
+          return;
+        }
+
+        // 读取文件内容
+        const result = await window.electronAPI.readFile(node.path);
+        if (!result.success) {
+          alert('Failed to read file: ' + result.error);
+          return;
+        }
+
+        const fileContent = result.content;
+        const fileName = node.name;
+
+        // 构建消息
+        const message = `I'm adding a file to our chat:\n\n**File: ${fileName}**\n\n\`\`\`\n${fileContent}\n\`\`\``;
+
+        // 通过全局接口与 AI 聊天组件通信
+        if (isNew) {
+          // 创建新会话
+          console.log('➕ 创建新会话');
+          window.aiChat.createNewSession();
+          
+          // 稍微延迟后发送消息，确保新会话已创建
+          setTimeout(() => {
+            if (window.aiChat && window.aiChat.inputElement) {
+              window.aiChat.inputElement.value = message;
+              window.aiChat.inputElement.focus();
+              console.log('✅ 文件已添加到新 Claude 聊天窗口');
+            }
+          }, 100);
+        } else {
+          // 添加到现有聊天
+          console.log('💬 添加到现有会话');
+          if (window.aiChat && window.aiChat.inputElement) {
+            window.aiChat.inputElement.value = message;
+            window.aiChat.inputElement.focus();
+            console.log('✅ 文件已添加到 Claude 聊天窗口');
+          }
+        }
+      } catch (error) {
+        console.error('❌ 添加文件到聊天失败:', error);
+        alert('Failed to add file to chat: ' + error.message);
+      }
+    }
+
+    /**
+     * 将文件作为附件添加到现有聊天
+     */
+    async addFileAsAttachment(node, isImage = false) {
+      try {
+        console.log('📎 开始添加文件作为附件...');
+        
+        // 确保 AI 聊天组件已初始化
+        if (!window.aiChat) {
+          console.log('⚠️ AI 聊天组件未初始化，正在初始化...');
+          if (window.studio && typeof window.studio.toggleAIPanel === 'function') {
+            window.studio.toggleAIPanel();
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+
+        if (!window.aiChat) {
+          alert('Claude Chat Component not found. Please open the AI Chat panel first (Cmd+L).');
+          return;
+        }
+
+        // 确保附件管理器已初始化
+        if (!window.attachmentManager) {
+          console.error('❌ AttachmentManager not found');
+          alert('Attachment manager not initialized');
+          return;
+        }
+
+        // 创建虚拟 File 对象
+        const fileName = node.name;
+        const fakeFile = {
+          name: fileName,
+          size: 0,
+          type: isImage ? 'image/png' : 'application/octet-stream',
+          path: node.path
+        };
+
+        // 添加附件
+        console.log('📎 添加附件到管理器:', fileName);
+        const attachment = await window.attachmentManager.addAttachment(fakeFile, node.path);
+        
+        if (attachment) {
+          window.aiChat.updateAttachmentsList();
+          console.log('✅ 附件已添加:', fileName);
+          
+          // 打开 AI Chat 如果还没有打开
+          const aiPanel = document.querySelector('.ai-chat-container');
+          if (aiPanel && aiPanel.style.display === 'none') {
+            if (window.studio && typeof window.studio.toggleAIPanel === 'function') {
+              window.studio.toggleAIPanel();
+            }
+          }
+          
+          console.log('✅ 文件已添加为附件');
+        } else {
+          alert('Failed to add file as attachment');
+        }
+      } catch (error) {
+        console.error('❌ 添加附件失败:', error);
+        alert('Failed to add attachment: ' + error.message);
+      }
+    }
+
+    /**
+     * 将文件作为附件添加到新聊天
+     */
+    async addFileAsAttachmentNew(node, isImage = false) {
+      try {
+        console.log('📎✨ 开始添加文件作为附件到新会话...');
+        
+        // 确保 AI 聊天组件已初始化
+        if (!window.aiChat) {
+          console.log('⚠️ AI 聊天组件未初始化，正在初始化...');
+          if (window.studio && typeof window.studio.toggleAIPanel === 'function') {
+            window.studio.toggleAIPanel();
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+
+        if (!window.aiChat) {
+          alert('Claude Chat Component not found');
+          return;
+        }
+
+        // 创建新会话
+        console.log('➕ 创建新会话');
+        window.aiChat.createNewSession();
+        
+        // 延迟以确保新会话已创建
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        // 添加附件
+        if (window.attachmentManager) {
+          const fileName = node.name;
+          const fakeFile = {
+            name: fileName,
+            size: 0,
+            type: isImage ? 'image/png' : 'application/octet-stream',
+            path: node.path
+          };
+
+          console.log('📎 添加附件到新会话:', fileName);
+          const attachment = await window.attachmentManager.addAttachment(fakeFile, node.path);
+          
+          if (attachment) {
+            window.aiChat.updateAttachmentsList();
+            console.log('✅ 附件已添加到新会话:', fileName);
+          }
+        }
+
+      } catch (error) {
+        console.error('❌ 添加附件到新会话失败:', error);
+        alert('Failed to add attachment: ' + error.message);
+      }
+    }
+
+    /**
+     * 将图片文件作为附件添加
+     */
+    async addFileAsAttachmentImage(node) {
+      return this.addFileAsAttachment(node, true);
+    }
+
+    /**
+     * 复制文件路径
+     */
+    copyPath(filePath) {
+      navigator.clipboard.writeText(filePath).then(() => {
+        console.log('✅ 路径已复制到剪贴板');
+      }).catch(err => {
+        console.error('❌ 复制失败:', err);
+      });
+    }
+
+    /**
+     * 复制相对路径
+     */
+    copyRelativePath(filePath) {
+      const relativePath = './' + filePath;
+      navigator.clipboard.writeText(relativePath).then(() => {
+        console.log('✅ 相对路径已复制到剪贴板');
+      }).catch(err => {
+        console.error('❌ 复制失败:', err);
+      });
+    }
+
+    /**
+     * 在 Finder 中显示文件
+     */
+    revealInFinder(filePath) {
+      if (window.electronAPI && window.electronAPI.revealInFinder) {
+        window.electronAPI.revealInFinder(filePath);
+        console.log('✅ 在 Finder 中打开');
+      } else {
+        console.warn('⚠️ revealInFinder API not available');
       }
     }
   }
@@ -1388,6 +1779,10 @@
       this.initialized = false;
       this.currentConversationId = null;
       this.lastTerminalHeight = store.getState('ui.terminalHeight') || 200;
+      
+      // 附件管理系统
+      this.attachmentManager = null;
+      this.fileValidator = null;
     }
 
     async init() {
@@ -1405,6 +1800,15 @@
         this.terminal = new TerminalManager();
         this.resizer = new ResizerManager();
         this.contextManager = new ContextManager(this.editor);
+        
+        // 初始化附件管理系统
+        if (typeof FileValidator !== 'undefined' && typeof AttachmentManager !== 'undefined') {
+          this.fileValidator = new FileValidator();
+          this.attachmentManager = new AttachmentManager();
+          console.log('✓ 附件管理系统已初始化');
+        } else {
+          console.warn('⚠️ 附件管理系统未加载');
+        }
 
         // 初始化编辑器
         const editorContainer = document.getElementById('editor-container');
@@ -1415,6 +1819,10 @@
           // 初始化错误诊断（需要 ErrorDiagnostics 模块）
           this.initErrorDiagnostics();
         }
+
+        // 初始化面包屑路径容器（在这里初始化，而不是在 EditorManager）
+        this.breadcrumbContainer = document.getElementById('breadcrumb-bar');
+        console.log('✅ 初始化面包屑容器:', this.breadcrumbContainer);
 
         // 初始化文件树
         const fileTreeContainer = document.getElementById('file-tree');
@@ -1484,9 +1892,35 @@
 
     bindEvents() {
       // 文件打开事件
-      window.addEventListener('file:open', async (e) => {
-        const { path, content, language } = e.detail;
+      window.addEventListener('file:open', (e) => {
+        const { path, content, language, line = 1, column = 1 } = e.detail;
+        
+        // 打开文件在编辑器中
         this.editor.openFile(path, content, language);
+        
+        // 设置光标位置（如果指定了行列号）
+        if (line && column && this.editor.editor) {
+          try {
+            console.log('🎯 设置光标位置:', { line, column });
+            // 使用 setTimeout 确保编辑器内容已加载
+            setTimeout(() => {
+              this.editor.editor.revealLineInCenter(line);
+              this.editor.editor.setPosition({ lineNumber: line, column: column });
+              console.log('✅ 光标位置设置成功');
+            }, 100);
+          } catch (posError) {
+            console.warn('⚠️ 设置光标位置失败:', posError.message);
+            // 不中断流程，继续
+          }
+        }
+        
+        // 更新活跃文件状态
+        store.setState('editor.activeFile', path);
+        
+        // 更新面包屑路径
+        console.log('📍 调用 updateBreadcrumb，路径:', path);
+        console.log('📍 breadcrumbContainer:', this.breadcrumbContainer);
+        this.updateBreadcrumb(path);
         
         // 显示打开成功提示
         const fileName = path.split('/').pop();
@@ -1568,7 +2002,24 @@
       const sessionsBtn = document.getElementById('sessions-btn');
       if (sessionsBtn) {
         sessionsBtn.addEventListener('click', () => {
-          this.showSessionsDialog();
+          // MVP-1.2: 切换会话列表
+          if (window.aiChat && typeof window.aiChat.toggleSessionList === 'function') {
+            window.aiChat.toggleSessionList();
+          } else {
+            // 备用方案：显示对话框
+            this.showSessionsDialog();
+          }
+        });
+      }
+
+      // MVP-2.1: 系统提示设置按钮
+      const promptSettingsBtn = document.getElementById('prompt-settings-btn');
+      if (promptSettingsBtn) {
+        promptSettingsBtn.addEventListener('click', () => {
+          if (window.systemPromptManager && typeof SystemPromptDialog !== 'undefined') {
+            const promptDialog = new SystemPromptDialog(window.systemPromptManager);
+            promptDialog.open();
+          }
         });
       }
 
@@ -1623,19 +2074,545 @@
         });
       }
 
-      // 快速搜索框（暂时只添加焦点提示）
+      // 快速搜索框集成
       const quickSearch = document.getElementById('quick-search');
       if (quickSearch) {
         quickSearch.addEventListener('focus', () => {
-          toast.show('搜索功能开发中...', 'info', 2000);
+          this.showSearchPanel();
+        });
+        quickSearch.addEventListener('input', (e) => {
+          const searchInput = document.getElementById('searchInput');
+          if (searchInput) {
+            searchInput.value = e.target.value;
+            this.performSearch();
+          }
         });
         quickSearch.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
             quickSearch.blur();
+            this.hideSearchPanel();
           }
         });
       }
 
+      // 搜索面板事件
+      const searchCloseBtn = document.getElementById('searchCloseBtn');
+      if (searchCloseBtn) {
+        searchCloseBtn.addEventListener('click', () => this.hideSearchPanel());
+      }
+
+      const searchBtn = document.getElementById('searchBtn');
+      if (searchBtn) {
+        searchBtn.addEventListener('click', () => this.performSearch());
+      }
+
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) {
+        searchInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            this.performSearch();
+          } else if (e.key === 'Escape') {
+            this.hideSearchPanel();
+          }
+        });
+      }
+
+      // 搜索结果导航
+      const prevBtn = document.getElementById('prevResultBtn');
+      const nextBtn = document.getElementById('nextResultBtn');
+      if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+          if (window.searchComponent) {
+            window.searchComponent.previousResult();
+            this.renderSearchResults();
+          }
+        });
+      }
+      if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+          if (window.searchComponent) {
+            window.searchComponent.nextResult();
+            this.renderSearchResults();
+          }
+        });
+      }
+
+    }
+
+    /**
+     * 显示搜索面板
+     */
+    showSearchPanel() {
+      const panel = document.getElementById('search-panel');
+      if (panel) {
+        panel.style.display = 'flex';
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+          searchInput.focus();
+        }
+      }
+    }
+
+    /**
+     * 隐藏搜索面板
+     */
+    hideSearchPanel() {
+      const panel = document.getElementById('search-panel');
+      if (panel) {
+        panel.style.display = 'none';
+      }
+      // 清空快速搜索框
+      const quickSearch = document.getElementById('quick-search');
+      if (quickSearch) {
+        quickSearch.value = '';
+      }
+    }
+
+    /**
+     * 执行搜索 - 优先搜索当前文件，再搜索整个项目
+     */
+    async performSearch() {
+      if (!window.searchComponent) return;
+
+      const searchInput = document.getElementById('searchInput');
+      const query = searchInput?.value.trim();
+
+      if (!query) {
+        document.getElementById('searchResults').innerHTML = 
+          '<div class="no-results">输入搜索词开始搜索</div>';
+        return;
+      }
+
+      // 获取搜索选项
+      const options = {
+        caseSensitive: document.getElementById('caseSensitive')?.checked || false,
+        wholeWord: document.getElementById('wholeWord')?.checked || false,
+        useRegex: document.getElementById('useRegex')?.checked || false
+      };
+
+      try {
+        // 尝试在当前编辑器文件中搜索
+        const activeFile = store.getState('editor.activeFile');
+        
+        // 获取当前编辑器内容的多种方式
+        let currentContent = null;
+        if (this.editor) {
+          // 方式1: 使用 getValue() 方法 (Monaco Editor)
+          if (typeof this.editor.getValue === 'function') {
+            currentContent = this.editor.getValue();
+            console.log('✅ 使用 getValue() 获取编辑器内容');
+          }
+          // 方式2: 直接访问 currentContent 属性 (备选)
+          else if (this.editor.currentContent) {
+            currentContent = this.editor.currentContent;
+            console.log('✅ 使用 currentContent 属性获取编辑器内容');
+          }
+          // 方式3: 使用 getContent() 方法 (备选)
+          else if (typeof this.editor.getContent === 'function') {
+            currentContent = this.editor.getContent();
+            console.log('✅ 使用 getContent() 获取编辑器内容');
+          }
+          // 方式4: 尝试从 MonacoEditor 对象获取编辑器实例
+          else if (this.editor.editor && typeof this.editor.editor.getValue === 'function') {
+            currentContent = this.editor.editor.getValue();
+            console.log('✅ 从编辑器实例获取内容');
+          }
+        }
+
+        // 如果内容为空或仅空白，提示
+        if (!currentContent || currentContent.trim().length === 0) {
+          console.warn('⚠️ 编辑器内容为空，检查编辑器状态:', {
+            editorExists: !!this.editor,
+            hasGetValue: !!(this.editor && typeof this.editor.getValue === 'function'),
+            editorValue: currentContent ? currentContent.substring(0, 50) : 'null'
+          });
+        }
+
+        // 调试日志
+        console.log('🔍 搜索调试信息:', {
+          activeFile,
+          hasEditor: !!this.editor,
+          hasContent: !!currentContent,
+          contentLength: currentContent?.length || 0,
+          query,
+          searchOptions: options
+        });
+
+        // 🔑 关键改变：现在总是使用项目搜索作为主要方式
+        // 项目搜索会首先尝试在本地文件中查找匹配项
+        console.log('📁 开始项目搜索...');
+        
+        try {
+          await window.searchComponent.searchInProject(query, options);
+          console.log('📁 项目搜索结果:', window.searchComponent.searchResults.length, '个匹配');
+        } catch (projError) {
+          console.warn('❌ 项目搜索失败:', projError);
+          window.searchComponent.searchResults = [];
+        }
+        
+        window.searchComponent.currentResultIndex = 0;
+        this.renderSearchResults();
+      } catch (error) {
+        console.error('❌ 搜索失败:', error);
+        document.getElementById('searchResults').innerHTML = 
+          `<div class="no-results">搜索失败: ${error.message}</div>`;
+      }
+    }
+
+    /**
+     * 渲染搜索结果
+     */
+    renderSearchResults() {
+      if (!window.searchComponent) return;
+
+      const results = window.searchComponent.searchResults;
+      const countElement = document.getElementById('searchResultsCount');
+      const resultsContainer = document.getElementById('searchResults');
+
+      if (!countElement || !resultsContainer) return;
+
+      // 按文件分组统计
+      const fileCount = new Set(results.map(r => r.file)).size;
+      const summary = fileCount > 1 
+        ? `${results.length} 个结果，${fileCount} 个文件` 
+        : `${results.length} 个结果`;
+      countElement.textContent = summary;
+
+      if (results.length === 0) {
+        resultsContainer.innerHTML = '<div class="no-results">未找到匹配项</div>';
+        return;
+      }
+
+      const html = results.map((result, index) => {
+        const fileName = result.file ? result.file.split('/').pop() : '未知文件';
+        const fileIcon = result.isCurrentFile ? '📄' : '📑';
+        
+        return `
+          <div class="search-result-item ${index === window.searchComponent.currentResultIndex ? 'active' : ''}"
+               onclick="(async () => { await window.studio.selectSearchResult(${index}); })()">
+            <div class="result-file">${fileIcon} ${fileName}</div>
+            <div class="result-location">第 ${result.line || 0} 行 第 ${result.column || 1} 列</div>
+            <div class="result-content">${this.highlightSearchMatch(result.content, result.match)}</div>
+          </div>
+        `;
+      }).join('');
+
+      resultsContainer.innerHTML = html;
+    }
+
+    /**
+     * 高亮匹配文本
+     */
+    highlightSearchMatch(content, match) {
+      if (!match || !content) return content;
+      return content.replace(
+        new RegExp(match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+        '<mark>$&</mark>'
+      );
+    }
+
+    /**
+     * 选择搜索结果并打开对应文件
+     */
+    async selectSearchResult(index) {
+      if (!window.searchComponent) return;
+      const result = window.searchComponent.searchResults[index];
+      if (!result) return;
+
+      window.searchComponent.currentResultIndex = index;
+      this.renderSearchResults();
+
+      // 打开搜索结果对应的文件
+      await this.openSearchResultFile(result);
+    }
+
+    /**
+     * 打开搜索结果对应的文件
+     */
+    async openSearchResultFile(result) {
+      if (!result || !result.file) return;
+
+      const filePath = result.file;
+      const line = result.line || 1;
+      const column = result.column || 1;
+
+      console.log('🔍 打开搜索结果文件:', filePath, `(行: ${line}, 列: ${column})`);
+
+      try {
+        // 处理文件路径
+        let fullPath = filePath;
+        if (filePath.startsWith('./')) {
+          fullPath = filePath.substring(2); // 移除 './'
+        }
+
+        console.log('📂 文件路径:', fullPath);
+
+        // 检查是否有 Electron API
+        if (!window.electronAPI || !window.electronAPI.readFile) {
+          console.warn('⚠️ Electron API 不可用，尝试使用替代方案');
+          this.openSearchResultFileSync(result);
+          return;
+        }
+
+        // 使用 IPC 通信读取文件
+        console.log('📡 通过 IPC 读取文件...');
+        
+        let ipcResult;
+        try {
+          ipcResult = await window.electronAPI.readFile(fullPath);
+          console.log('✅ IPC 调用成功');
+        } catch (ipcError) {
+          console.warn('⚠️ IPC 调用失败:', ipcError.message);
+          console.warn('⚠️ 切换到备选方案...');
+          this.openSearchResultFileSync(result);
+          return;
+        }
+
+        // 处理 IPC 返回结果
+        // IPC 返回格式: { success: true, content: "..." }
+        let content;
+        if (ipcResult && typeof ipcResult === 'object') {
+          if (!ipcResult.success) {
+            console.warn('⚠️ IPC 返回错误:', ipcResult.error);
+            alert(`无法读取文件: ${ipcResult.error || '未知错误'}`);
+            return;
+          }
+          content = ipcResult.content;
+        } else {
+          // 直接字符串返回（兼容旧版本）
+          content = ipcResult;
+        }
+
+        if (!content) {
+          console.warn('⚠️ 文件内容为空或不存在');
+          alert(`无法读取文件: ${filePath}`);
+          return;
+        }
+
+        // 确保内容是字符串
+        const contentStr = typeof content === 'string' ? content : String(content);
+        
+        console.log('✅ 文件内容读取成功，长度:', contentStr.length, '字节');
+
+        // 获取文件扩展名并检测语言
+        const ext = fullPath.split('.').pop();
+        const language = this.getLanguageFromExtension(ext);
+
+        console.log('📝 检测到语言:', language);
+
+        // 使用统一的文件打开逻辑（与资源列表一致）
+        console.log('📤 触发统一的文件打开事件...');
+        window.dispatchEvent(new CustomEvent('file:open', {
+          detail: { 
+            path: fullPath, 
+            content: contentStr, 
+            language,
+            line: line,
+            column: column
+          }
+        }));
+
+        console.log('✅ 文件打开事件已触发');
+      } catch (error) {
+        console.error('❌ 打开文件失败:', error.message);
+        console.error('错误堆栈:', error.stack);
+        alert(`打开文件失败: ${error.message}`);
+      }
+    }
+
+    /**
+     * 从文件扩展名获取语言类型
+     */
+    getLanguageFromExtension(ext) {
+      const languageMap = {
+        'js': 'javascript',
+        'jsx': 'javascript',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'json': 'json',
+        'md': 'markdown',
+        'html': 'html',
+        'css': 'css',
+        'scss': 'scss',
+        'less': 'less',
+        'py': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c': 'c',
+        'cs': 'csharp',
+        'sh': 'shell',
+        'bash': 'shell',
+        'yml': 'yaml',
+        'yaml': 'yaml',
+        'xml': 'xml',
+        'txt': 'text'
+      };
+      
+      return languageMap[ext?.toLowerCase()] || 'text';
+    }
+
+    /**
+     * 同步打开文件（备选方案，当 IPC 不可用时使用）
+     */
+    openSearchResultFileSync(result) {
+      if (!result || !result.file) return;
+
+      const filePath = result.file;
+      const line = result.line || 1;
+      const column = result.column || 1;
+
+      console.log('🔄 使用备选方案打开文件...');
+
+      try {
+        // 尝试使用 Node.js require（可能在某些配置下可用）
+        const fs = require('fs');
+        const path = require('path');
+
+        let fullPath = filePath;
+        if (filePath.startsWith('./')) {
+          fullPath = path.join(process.cwd(), filePath);
+        } else if (!path.isAbsolute(filePath)) {
+          fullPath = path.join(process.cwd(), filePath);
+        }
+
+        console.log('📂 完整文件路径:', fullPath);
+
+        // 检查文件是否存在
+        if (!fs.existsSync(fullPath)) {
+          console.warn('⚠️ 文件不存在:', fullPath);
+          alert(`文件不存在: ${filePath}`);
+          return;
+        }
+
+        // 读取文件内容
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        const language = this.detectLanguage(fullPath);
+
+        console.log('✅ 文件内容读取成功，长度:', content.length, '字节');
+
+        // 打开文件在编辑器中
+        if (this.editor) {
+          this.editor.openFile(fullPath, content, language);
+
+          if (this.editor.editor && line && column) {
+            this.editor.editor.revealLineInCenter(line);
+            this.editor.editor.setPosition({ lineNumber: line, column: column });
+          }
+
+          store.setState('editor.activeFile', fullPath);
+          console.log('✅ 文件已在编辑器中打开');
+        }
+      } catch (fallbackError) {
+        console.error('❌ 备选方案也失败了:', fallbackError.message);
+        alert(`无法打开文件: ${result.file}\n\n原因: ${fallbackError.message}`);
+      }
+    }
+
+    /**
+     * 更新面包屑路径
+     */
+    updateBreadcrumb(filePath) {
+      if (!this.breadcrumbContainer) {
+        console.warn('⚠️ breadcrumbContainer 未找到或未初始化');
+        return;
+      }
+
+      console.log('🍞 开始更新面包屑，路径:', filePath);
+
+      // 清空现有面包屑
+      this.breadcrumbContainer.innerHTML = '';
+
+      // 规范化路径：移除开头的 ./
+      let normalizedPath = filePath;
+      if (normalizedPath.startsWith('./')) {
+        normalizedPath = normalizedPath.substring(2);
+      }
+
+      console.log('🍞 规范化后的路径:', normalizedPath);
+
+      // 分割路径
+      const parts = normalizedPath.split('/').filter(p => p.length > 0);
+
+      console.log('🍞 路径分割结果:', parts);
+
+      // 如果没有路径，显示文件名
+      if (parts.length === 0) {
+        this.breadcrumbContainer.innerHTML = '<span class="breadcrumb-item current">文件</span>';
+        console.log('✅ 面包屑已更新 (单个文件)');
+        return;
+      }
+
+      // 构建面包屑
+      parts.forEach((part, index) => {
+        const isLast = index === parts.length - 1;
+
+        // 添加路径项
+        const item = document.createElement('span');
+        item.className = `breadcrumb-item ${isLast ? 'current' : ''}`;
+        
+        // 构建到该项的完整路径
+        const itemPath = './' + parts.slice(0, index + 1).join('/');
+
+        item.innerHTML = part;
+        
+        // 如果不是最后一项（当前文件），添加点击事件
+        if (!isLast) {
+          item.style.cursor = 'pointer';
+          item.addEventListener('click', async () => {
+            console.log('🔍 点击面包屑导航:', itemPath);
+            // 如果点击的是文件夹，可以在文件树中展开（预留扩展）
+            // 或者显示该文件夹的内容
+          });
+        }
+
+        this.breadcrumbContainer.appendChild(item);
+
+        // 添加分隔符（除了最后一项）
+        if (!isLast) {
+          const separator = document.createElement('span');
+          separator.className = 'breadcrumb-separator';
+          separator.innerHTML = '›';
+          this.breadcrumbContainer.appendChild(separator);
+        }
+      });
+
+      console.log('✅ 面包屑已更新:', parts.join(' › '));
+
+      // 如果路径过长，添加滚动提示
+      if (parts.length > 5) {
+        this.breadcrumbContainer.style.justifyContent = 'flex-start';
+      }
+    }
+
+    /**
+     * 根据文件扩展名检测语言
+     */
+    detectLanguage(filePath) {
+      const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
+      
+      const languageMap = {
+        '.js': 'javascript',
+        '.ts': 'typescript',
+        '.jsx': 'javascript',
+        '.tsx': 'typescript',
+        '.json': 'json',
+        '.md': 'markdown',
+        '.html': 'html',
+        '.css': 'css',
+        '.scss': 'scss',
+        '.py': 'python',
+        '.java': 'java',
+        '.cpp': 'cpp',
+        '.c': 'c',
+        '.xml': 'xml',
+        '.yaml': 'yaml',
+        '.yml': 'yaml',
+        '.sh': 'shell',
+        '.bash': 'shell',
+        '.txt': 'plaintext'
+      };
+
+      return languageMap[ext] || 'plaintext';
     }
 
     bindKeyboardShortcuts() {
@@ -1693,6 +2670,27 @@
             const prevIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
             this.editor.switchTab(tabs[prevIndex].path);
           }
+        }
+
+        // Cmd/Ctrl + Shift + C - 继续上次对话 (MVP-1.1)
+        if (cmdOrCtrl && e.shiftKey && (e.key === 'c' || e.key === 'C' || e.code === 'KeyC' || e.keyCode === 67)) {
+          e.preventDefault();
+          e.stopPropagation();
+          // 确保 AI 面板是打开的
+          if (!store.getState('ui.aiPanelVisible')) {
+            store.setState('ui.aiPanelVisible', true);
+          }
+          // 调用 AI 聊天组件的继续对话方法
+          if (window.aiChat && typeof window.aiChat.continueLastConversation === 'function') {
+            window.aiChat.continueLastConversation();
+          }
+        }
+
+        // Cmd/Ctrl + Shift + F - 打开搜索
+        if (cmdOrCtrl && e.shiftKey && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF' || e.keyCode === 70)) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.showSearchPanel();
         }
       });
 
@@ -1771,6 +2769,20 @@
       if (!visible) {
         // 打开 AI 面板
         toast.show('💬 AI 助手已打开 (Cmd+Shift+L 关闭)', 'info', 2000);
+        
+        // MVP-1.1: 初始化 AI 聊天组件
+        if (!window.aiChat) {
+          try {
+            const aiChatContainer = document.querySelector('.ai-panel');
+            if (aiChatContainer && typeof AIChatComponent !== 'undefined') {
+              window.aiChat = new AIChatComponent('aiChatContainer');
+              window.aiChat.init();
+            }
+          } catch (error) {
+            console.warn('⚠️ 无法初始化 AI 聊天组件:', error);
+          }
+        }
+        
         const chatInput = document.getElementById('chat-input');
         if (chatInput) {
           setTimeout(() => chatInput.focus(), 100);
@@ -3227,19 +4239,38 @@ ${textBeforeCursor}
 
   // ==================== 初始化 ====================
   const studio = new ClaudeStudio();
+  console.log('✓ ClaudeStudio 类已实例化');
 
   // DOM 加载完成后初始化
   if (document.readyState === 'loading') {
+    console.log('ℹ️ DOM 加载中，等待 DOMContentLoaded...');
     document.addEventListener('DOMContentLoaded', () => {
-      studio.init();
+      console.log('✓ DOMContentLoaded 事件触发，开始初始化...');
+      studio.init().catch(err => {
+        console.error('❌ 初始化失败:', err);
+      });
     });
   } else {
-    studio.init();
+    console.log('✓ DOM 已加载，立即初始化...');
+    studio.init().catch(err => {
+      console.error('❌ 初始化失败:', err);
+    });
   }
 
   // 导出供外部使用
   window.studio = studio;
   window.store = store;
+  console.log('✓ 全局变量导出完成');
+
+  // 注: window.aiChat 会在 toggleAIPanel 时被 AIChatComponent 创建和设置
+  // 注: window.chatHistoryManager 会由 AIChatComponent 或其他模块设置
+  
+  // 暴露附件管理系统供外部使用
+  if (studio && studio.attachmentManager) {
+    window.attachmentManager = studio.attachmentManager;
+    window.fileValidator = studio.fileValidator;
+    console.log('✓ 附件管理系统已暴露到全局');
+  }
 
 })();
 

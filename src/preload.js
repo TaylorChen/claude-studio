@@ -77,9 +77,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getFileInfo: (filePath) => ipcRenderer.invoke('get-file-info', filePath),
   searchInFiles: (query, options) => ipcRenderer.invoke('search-in-files', query, options),
   replaceInFiles: (searchText, replaceText, options) => ipcRenderer.invoke('replace-in-files', searchText, replaceText, options),
+  revealInFinder: (filePath) => ipcRenderer.invoke('reveal-in-finder', filePath),
   openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
   openProjectDialog: () => ipcRenderer.invoke('open-project-dialog'),
   newProjectDialog: () => ipcRenderer.invoke('new-project-dialog'),
+  selectAttachmentFiles: (filterType) => ipcRenderer.invoke('select-attachment-files', filterType),
 
   // 终端操作
   createTerminal: (terminalId, options) => ipcRenderer.invoke('create-terminal', terminalId, options),

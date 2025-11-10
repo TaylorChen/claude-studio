@@ -441,6 +441,14 @@ ipcMain.handle('claude:session:restore', async (event, sessionId) => {
 // ==================== 模型管理 ====================
 
 // 列出可用模型
+// 默认模型列表 - 保持一致性
+const DEFAULT_MODELS = [
+  { id: 'claude-opus-4-1-20250805', name: 'Claude Opus 4.1', description: '最新最强大的模型' },
+  { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: '高效平衡模型' },
+  { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
+  { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
+];
+
 ipcMain.handle('claude:model:list', async () => {
   try {
     const { spawn } = require('child_process');
@@ -458,48 +466,63 @@ ipcMain.handle('claude:model:list', async () => {
       });
 
       process.on('close', (code) => {
-        // 无论成功失败，都返回默认模型列表
-        // 因为 claude CLI 可能不支持 model ls 命令
-        resolve({ 
-          success: true, 
-          models: [
-            { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: '最新最强大的模型' },
-            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: '最强大的模型' },
-            { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
-            { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
-          ]
-        });
+        // 尝试解析 Claude CLI 的输出
+        // 如果解析成功，返回解析后的模型列表
+        // 否则返回默认列表
+        console.log('claude model ls 输出:', output);
+        if (code === 0 && output.trim()) {
+          // TODO: 实现 Claude CLI 输出解析
+          // 目前返回默认列表，因为 Claude CLI 的格式可能不同
+          resolve({ 
+            success: true, 
+            models: DEFAULT_MODELS
+          });
+        } else {
+          resolve({ 
+            success: true, 
+            models: DEFAULT_MODELS
+          });
+        }
       });
 
+      // 增加超时时间到 10 秒，确保有足够时间获取模型列表
       setTimeout(() => {
         process.kill();
+        console.warn('claude model ls 超时，使用默认模型列表');
         resolve({ 
           success: true, 
-          models: [
-            { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: '最强大的模型' },
-            { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
-            { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
-          ]
+          models: DEFAULT_MODELS
         });
-      }, 5000);
+      }, 10000);
     });
   } catch (error) {
     console.error('列出模型失败:', error);
     // 返回默认模型列表而不是错误
     return { 
       success: true, 
-      models: [
-        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: '最强大的模型' },
-        { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: '平衡性能和成本' },
-        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: '快速响应' }
-      ]
+      models: DEFAULT_MODELS
     };
   }
 });
 
+// 验证模型 ID 是否有效
+function isValidModel(modelId) {
+  return DEFAULT_MODELS.some(m => m.id === modelId);
+}
+
 // 设置默认模型
 ipcMain.handle('claude:model:set', async (event, modelId) => {
   try {
+    // 验证模型 ID
+    if (!isValidModel(modelId)) {
+      console.warn(`⚠️ 无效的模型 ID: ${modelId}`);
+      return { 
+        success: false, 
+        error: `模型不存在: ${modelId}`,
+        validModels: DEFAULT_MODELS.map(m => m.id)
+      };
+    }
+    
     // 更新 ClaudeService 的配置
     claudeService.updateConfig({ model: modelId });
     
@@ -532,7 +555,7 @@ ipcMain.handle('claude:model:set', async (event, modelId) => {
 // 获取当前模型
 ipcMain.handle('claude:model:current', () => {
   try {
-    const currentModel = claudeService.config.model || 'claude-3-opus-20240229';
+    const currentModel = claudeService.config.model || 'claude-opus-4-1-20250805';
     return { success: true, model: currentModel };
   } catch (error) {
     console.error('获取当前模型失败:', error);
@@ -914,6 +937,42 @@ ipcMain.handle('open-project-dialog', async () => {
   }
 });
 
+ipcMain.handle('select-attachment-files', async (event, filterType = 'all') => {
+  try {
+    let filters = [];
+    
+    if (filterType === 'image' || filterType === 'all') {
+      filters.push({ name: '图像文件', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] });
+    }
+    
+    if (filterType === 'document' || filterType === 'all') {
+      filters.push({ name: '文档文件', extensions: ['txt', 'md', 'pdf', 'json', 'xml', 'csv', 'html'] });
+    }
+    
+    if (filterType === 'code' || filterType === 'all') {
+      filters.push({ name: '代码文件', extensions: ['js', 'py', 'java', 'cpp', 'c', 'go', 'rs', 'rb', 'ts', 'jsx', 'tsx'] });
+    }
+    
+    if (filterType === 'all') {
+      filters.push({ name: '所有文件', extensions: ['*'] });
+    }
+    
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择要附加的文件',
+      properties: ['openFile', 'multiSelections'],
+      filters: filters
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+      // 返回选中文件的完整路径
+      return { success: true, filePaths: result.filePaths };
+    }
+    return { success: false, canceled: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle('search-in-files', async (event, query, options = {}) => {
   try {
     const results = [];
@@ -1094,6 +1153,29 @@ async function executeGitCommand(args) {
     gitProcess.on('error', reject);
   });
 }
+
+// ==================== 文件操作相关处理器 ====================
+
+ipcMain.handle('reveal-in-finder', async (event, filePath) => {
+  try {
+    const fullPath = path.join(projectDir, filePath);
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(fullPath)) {
+      return { success: false, error: 'File not found' };
+    }
+
+    // 根据平台使用不同的命令
+    const { shell } = require('electron');
+    shell.showItemInFolder(fullPath);
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ==================== Git 相关处理器 ====================
 
 ipcMain.handle('git-status', async () => {
   try {

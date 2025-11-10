@@ -17,7 +17,7 @@ class ClaudeService extends EventEmitter {
     this.responseBuffer = '';
     this.config = {
       cliPath: 'claude', // Claude CLI 路径
-      model: 'claude-3-opus-20240229', // 默认模型
+      model: 'claude-opus-4-1-20250805', // 默认模型
       maxRetries: 3,
       retryDelay: 2000
     };

@@ -66,6 +66,11 @@
                 <!-- 标签页将在这里动态生成 -->
             </div>
 
+            <!-- 面包屑路径 -->
+            <div class="breadcrumb-bar" id="breadcrumb-bar">
+                <!-- 面包屑将在这里动态生成 -->
+            </div>
+
             <div class="editor-stack">
                 <div class="editor-surface">
                     <!-- Monaco Editor 容器 -->
@@ -103,38 +108,80 @@
                 <div class="ai-header-actions">
                     <button class="sidebar-btn" title="对话历史" id="history-btn">📚</button>
                     <button class="sidebar-btn" title="会话管理" id="sessions-btn">📋</button>
+                    <button class="sidebar-btn" title="系统提示" id="prompt-settings-btn">🎯</button>
                     <button class="sidebar-btn" title="模型选择" id="model-select-btn">⚙️</button>
                     <button class="sidebar-btn" title="关闭" id="close-ai-panel">×</button>
                 </div>
             </div>
 
-            <!-- 消息区域 -->
-            <div id="chat-messages">
-                <!-- 欢迎消息 -->
-                <div class="message">
-                    <div class="message-header">
-                        <span class="message-author">Claude</span>
-                        <span class="message-time">现在</span>
-                    </div>
-                    <div class="message-body">
-                        👋 你好！我是 Claude，你的 AI 编程助手。
-                        <br><br>
-                        <strong>试试这些操作：</strong><br>
-                        • 选中代码按 <code>Cmd+K</code> 进行内联编辑<br>
-                        • 按 <code>Cmd+L</code> 打开对话面板<br>
-                        • 在这里提问关于代码的任何问题
-                    </div>
+            <!-- MVP-1.2: 会话列表面板 -->
+            <div id="session-list-panel" class="session-list-panel" style="display: none; position: absolute; top: 40px; left: 0; right: 0; bottom: 0; background: white; z-index: 100; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
+                <div id="session-list-content" style="height: 100%; overflow-y: auto;"></div>
+            </div>
+
+            <!-- AI Chat 容器 - 由 AIChatComponent 完全控制 -->
+            <div id="aiChatContainer" style="display: flex; flex-direction: column; height: 100%; width: 100%;"></div>
+        </div>
+
+        <!-- 搜索面板 -->
+        <div id="search-panel" class="search-panel-container" style="display: none;">
+            <!-- 搜索工具栏 -->
+            <div class="search-toolbar">
+                <div class="search-input-group">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        class="search-input-field" 
+                        placeholder="搜索..."
+                        autofocus
+                    />
+                    <button class="search-btn" id="searchBtn" title="搜索">🔍</button>
+                    <button class="search-close-btn" id="searchCloseBtn" title="关闭搜索">✕</button>
                 </div>
             </div>
 
-            <!-- 输入区域 -->
-            <div class="ai-input-area">
-                    <textarea
-                    id="chat-input" 
-                    placeholder="问我任何关于代码的问题... (Enter 发送，Shift+Enter 换行)"
-                    rows="3"
-                    ></textarea>
-                <button class="send-btn" id="send-chat-btn">➤</button>
+            <!-- 搜索选项 -->
+            <div class="search-options">
+                <label class="search-option">
+                    <input type="checkbox" id="caseSensitive" />
+                    <span>区分大小写</span>
+                </label>
+                <label class="search-option">
+                    <input type="checkbox" id="wholeWord" />
+                    <span>全字匹配</span>
+                </label>
+                <label class="search-option">
+                    <input type="checkbox" id="useRegex" />
+                    <span>正则表达式</span>
+                </label>
+            </div>
+
+            <!-- 搜索结果容器 -->
+            <div class="search-results-container">
+                <div class="search-results-header">
+                    <span id="searchResultsCount">0 个结果</span>
+                    <div class="search-navigation">
+                        <button id="prevResultBtn">⬆</button>
+                        <button id="nextResultBtn">⬇</button>
+                    </div>
+                </div>
+                <div class="search-results" id="searchResults">
+                    <div class="no-results">输入搜索词开始搜索</div>
+                </div>
+            </div>
+
+            <!-- 替换部分 (隐藏) -->
+            <div class="search-replace-section" style="display: none;">
+                <input 
+                    type="text" 
+                    id="replaceInput" 
+                    class="search-input-field" 
+                    placeholder="替换为..."
+                />
+                <div class="search-replace-buttons">
+                    <button class="search-btn" id="replaceBtn">替换</button>
+                    <button class="search-btn" id="replaceAllBtn">全部替换</button>
+                </div>
             </div>
         </div>
     </div>
@@ -168,6 +215,9 @@
         var require = { paths: { vs: 'node_modules/monaco-editor/min/vs' } };
     </script>
     <script src="node_modules/monaco-editor/min/vs/loader.js"></script>
+    
+    <!-- 先加载 Markdown 库 -->
+    <script src="src/utils/initMarkdownLibraries.js"></script>
     
     <!-- 加载 xterm.js（解决 AMD 冲突） -->
     <script>
@@ -209,10 +259,137 @@
                 window.require = savedRequire;
                 window.define = savedDefine;
                 
-                // 加载 app.js
-                var script = document.createElement('script');
-                script.src = 'src/renderer/app.js';
-                document.body.appendChild(script);
+                // 加载所有组件脚本
+                var componentsLoaded = 0;
+                var componentsNeeded = 18;  // +2 for MessageBuilder 和 AttachmentProcessor (Phase 3)
+                
+                function checkAndLoadApp() {
+                  componentsLoaded++;
+                  console.log('✓ 组件加载中... (' + componentsLoaded + '/' + componentsNeeded + ')');
+                  
+                  if (componentsLoaded === componentsNeeded) {
+                        // 所有组件加载完成，加载 app.js
+                        console.log('✓ 所有组件加载完成，启动应用...');
+                        // 使用 setTimeout 确保 DOM 已完全加载
+                        setTimeout(function() {
+                            var script = document.createElement('script');
+                            script.src = 'src/renderer/app.js';
+                            script.onload = function() {
+                                console.log('✓ app.js 加载成功');
+                                console.log('✓ 应用启动完成！');
+                                if (window.studio) {
+                                    console.log('✓ Studio 实例已初始化');
+                                }
+                            };
+                            script.onerror = function() {
+                                console.error('❌ 加载 src/renderer/app.js 失败');
+                            };
+                            document.body.appendChild(script);
+                        }, 100);
+                    }
+                }
+                
+                function loadComponentWithErrorHandling(src, name) {
+                    var script = document.createElement('script');
+                    script.src = src;
+                    script.onload = function() {
+                        console.log('✓ 加载成功:', name);
+                        checkAndLoadApp();
+                    };
+                    script.onerror = function() {
+                        console.error('❌ 加载失败:', name, '(', src, ')');
+                        checkAndLoadApp();
+                    };
+                    document.body.appendChild(script);
+                }
+                
+                // 先加载存储管理器和 Markdown 渲染器
+                loadComponentWithErrorHandling('src/modules/storage/IndexedDBManager.js', 'IndexedDBManager');
+                loadComponentWithErrorHandling('src/utils/MarkdownRenderer.js', 'MarkdownRenderer');
+                
+                // 加载组件，带错误处理
+                loadComponentWithErrorHandling('src/components/MonacoEditor.js', 'MonacoEditor');
+                loadComponentWithErrorHandling('src/components/AIChatComponent.js', 'AIChatComponent');
+                loadComponentWithErrorHandling('src/components/SessionListComponent.js', 'SessionListComponent');
+                
+                // 加载 Managers 和 Dialogs，带错误处理
+                var exportImportScript = document.createElement('script');
+                exportImportScript.src = 'src/modules/ai/SessionExportImportManager.js';
+                exportImportScript.onload = function() {
+                    console.log('✓ 加载成功: SessionExportImportManager');
+                    if (typeof SessionExportImportManager !== 'undefined') {
+                        window.sessionExportImportManager = new SessionExportImportManager();
+                    }
+                    checkAndLoadApp();
+                };
+                exportImportScript.onerror = function() {
+                    console.error('❌ 加载失败: SessionExportImportManager');
+                    checkAndLoadApp();
+                };
+                document.body.appendChild(exportImportScript);
+
+                var promptManagerScript = document.createElement('script');
+                promptManagerScript.src = 'src/modules/ai/SystemPromptManager.js';
+                promptManagerScript.onload = function() {
+                    console.log('✓ 加载成功: SystemPromptManager');
+                    if (typeof SystemPromptManager !== 'undefined') {
+                        window.systemPromptManager = new SystemPromptManager();
+                    }
+                    checkAndLoadApp();
+                };
+                promptManagerScript.onerror = function() {
+                    console.error('❌ 加载失败: SystemPromptManager');
+                    checkAndLoadApp();
+                };
+                document.body.appendChild(promptManagerScript);
+
+                loadComponentWithErrorHandling('src/components/SystemPromptDialog.js', 'SystemPromptDialog');
+                
+                var templateLibScript = document.createElement('script');
+                templateLibScript.src = 'src/modules/ai/PromptTemplateLibrary.js';
+                templateLibScript.onload = function() {
+                    console.log('✓ 加载成功: PromptTemplateLibrary');
+                    if (typeof PromptTemplateLibrary !== 'undefined') {
+                        window.promptTemplateLibrary = new PromptTemplateLibrary();
+                    }
+                    checkAndLoadApp();
+                };
+                templateLibScript.onerror = function() {
+                    console.error('❌ 加载失败: PromptTemplateLibrary');
+                    checkAndLoadApp();
+                };
+                document.body.appendChild(templateLibScript);
+
+                loadComponentWithErrorHandling('src/components/PromptTemplateDialog.js', 'PromptTemplateDialog');
+
+                // Phase 3: 加载命令系统脚本
+                loadComponentWithErrorHandling('src/modules/ai/CommandParser.js', 'CommandParser');
+                loadComponentWithErrorHandling('src/modules/ai/CommandRegistry.js', 'CommandRegistry');
+                loadComponentWithErrorHandling('src/modules/ai/CommandExecutor.js', 'CommandExecutor');
+
+                // Phase 3-4: 加载附件管理系统和 API 集成
+                loadComponentWithErrorHandling('src/modules/attachments/FileValidator.js', 'FileValidator');
+                loadComponentWithErrorHandling('src/modules/attachments/AttachmentManager.js', 'AttachmentManager');
+                
+                // Phase 3: 加载 Claude API 集成模块
+                loadComponentWithErrorHandling('src/modules/ai/MessageBuilder.js', 'MessageBuilder');
+                loadComponentWithErrorHandling('src/modules/attachments/AttachmentProcessor.js', 'AttachmentProcessor');
+
+                // 加载搜索组件
+                var searchScript = document.createElement('script');
+                searchScript.src = 'src/components/SearchComponent.js';
+                searchScript.onload = function() {
+                    console.log('✓ 加载成功: SearchComponent');
+                    if (typeof SearchComponent !== 'undefined') {
+                        window.searchComponent = new SearchComponent();
+                    }
+                    checkAndLoadApp();
+                };
+                searchScript.onerror = function() {
+                    console.error('❌ 加载失败: SearchComponent');
+                    checkAndLoadApp();
+                };
+                document.body.appendChild(searchScript);
             }).catch(function(err) {
                 console.error('加载失败:', err);
             });

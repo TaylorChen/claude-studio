@@ -285,6 +285,31 @@ class ChatHistoryManager {
   }
 
   /**
+   * 获取最后一个对话
+   * @returns {object|null} 最后一个对话对象或 null
+   */
+  getLastConversation() {
+    if (this.conversations.length === 0) {
+      return null;
+    }
+    // 对话已按时间倒序排列，第一个是最新的
+    return this.conversations[0];
+  }
+
+  /**
+   * 恢复为最后一个对话
+   * @returns {object|null} 恢复的对话对象或 null
+   */
+  restoreLastConversation() {
+    const lastConv = this.getLastConversation();
+    if (lastConv) {
+      this.currentConversation = JSON.parse(JSON.stringify(lastConv));
+      return this.currentConversation;
+    }
+    return null;
+  }
+
+  /**
    * 转换为 Markdown 格式
    */
   toMarkdown(conversationId) {

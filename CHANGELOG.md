@@ -7,6 +7,127 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.2.0] - 2025-11-10
+
+### 🚀 Major Update - Attachments, Search & Context Integration
+
+#### ✨ Added
+
+**文件附件系统 (File Attachment System)**
+- 拖拽上传文件和图片到聊天
+- 附件按钮快速添加文件 (Cmd+Shift+A) 和图片 (Cmd+Shift+I)
+- 支持多文件同时添加
+- 智能路径处理和访问验证
+- 右键菜单快速添加为附件
+  - "Add as Attachment" - 添加到当前会话
+  - "Add as Attachment (New Chat)" - 创建新会话并添加
+  - "Add as Image Attachment" - 标记为图片类型
+- Claude 能够识别和分析图片内容
+- 文件类型验证和大小限制
+
+**高级搜索功能 (Advanced Search)**
+- 全局搜索 (Cmd+Shift+F)
+- 当前文件搜索
+- 项目范围搜索
+- 正则表达式支持
+- 搜索结果点击跳转
+- 面包屑导航显示当前打开文件路径
+
+**多会话支持增强 (Enhanced Multi-Session)**
+- IndexedDB 持久化存储
+- 会话自动恢复
+- 会话重命名功能
+- 新增会话按钮 (+)
+
+**斜杠命令系统 (Slash Commands)**
+- `/help` - 显示可用命令
+- `/clear` - 清空当前对话
+- `/model` - 检查或切换模型
+- `/exit` - 关闭聊天会话
+- 命令自动补全
+- 命令历史搜索 (Cmd+R)
+- 方向键导航建议
+
+**模型选择系统 (Model Selection)**
+- 模型列表统一管理
+- 模型验证和超时改进
+- 最新 Claude 模型支持 (Opus 4.1)
+
+**Markdown 和代码高亮**
+- AI 响应 Markdown 格式化
+- 代码块语法高亮
+- 本地库加载 (markdown-it, highlight.js)
+
+#### 🔧 Changed
+
+**代码质量**
+- 移除所有调试日志
+- 优化代码性能
+- 改进错误处理
+
+**模块重构**
+- AttachmentManager - 附件管理
+- FileValidator - 文件验证
+- MessageBuilder - 消息构建
+- AttachmentProcessor - 附件处理
+- CommandParser/Registry/Executor - 命令系统
+- SearchComponent - 搜索功能
+
+**IPC API 扩展**
+- 新增 `select-attachment-files` - 文件选择对话框
+- 改进 `read-file` - 文件读取
+- 模型管理 API 改进
+
+#### 🐛 Fixed
+
+**附件系统**
+- 修复文件路径访问限制
+- 修复 Claude CLI 沙箱问题
+- 支持相对路径自动转换
+
+**搜索功能**
+- 修复当前文件搜索
+- 修复项目搜索回退
+- 改进搜索结果优先级
+
+**会话管理**
+- 修复 IndexedDB 异步加载
+- 修复会话持久化问题
+- 修复会话切换内容更新
+
+**UI 修复**
+- 修复面包屑导航显示
+- 修复附件 UI 样式
+- 修复搜索面板布局
+
+#### 📊 Statistics
+
+- 新增文件: 7 个 (Attachments, Search, Commands modules)
+- 修改文件: 15+ 个
+- 新增代码: ~1500 行
+- 新增功能: 40+
+- 删除临时文档: 100+ 个
+- 改进的测试覆盖
+
+#### 🎯 User Experience
+
+**直观的文件管理**
+- 右键菜单一键添加附件
+- 拖拽支持更自然
+- 智能路径处理
+
+**强大的搜索**
+- 快速定位文件
+- 结果点击即跳转
+- 面包屑导航辅助定位
+
+**便利的命令系统**
+- 自动补全提升效率
+- 历史搜索快速回溯
+- 内置帮助文档
+
+---
+
 ## [2.1.1] - 2025-11-08
 
 ### 🎨 UI/UX Improvements

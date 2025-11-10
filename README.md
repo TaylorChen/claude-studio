@@ -26,20 +26,28 @@ A modern code editor designed for AI-assisted development, built with Electron a
 - **Syntax Highlighting** - Support for 100+ programming languages
 - **IntelliSense** - Intelligent code completion and suggestions
 - **Real-time Status Bar** - Line/column position, file type, cursor tracking
+- **Breadcrumb Navigation** - Quick path navigation in opened files
 
 ### 🤖 **AI-Powered Features**
 - **AI Chat Panel** - Integrated Claude AI assistance (`Cmd+Shift+L`)
 - **Inline Editing** - AI-powered code editing with diff preview (`Cmd+K`)
 - **Smart Code Completion** - Context-aware AI suggestions with Tab acceptance
-- **Session Management** - Save and restore AI chat sessions
-- **Model Selection** - Switch between Claude models (Opus, Sonnet, Haiku)
+- **Session Management** - Save and restore AI chat sessions with IndexedDB persistence
+- **Multi-Model Support** - Switch between Claude models (Opus 4.1, Sonnet 3.5, Haiku)
 - **Chat History** - Automatic conversation saving, search, and restore
+- **File Attachments** - Upload and analyze files, images, code with AI
+- **Right-Click Integration** - Quick file context menu for attachment handling
+- **Slash Commands** - `/help`, `/clear`, `/model` and more
+- **Command Auto-completion** - Smart suggestions for slash commands
 - **Error Diagnostics** - AI-powered error detection and auto-fix suggestions
 - **Context-Aware** - Automatically includes file context in AI requests
 
 ### 📁 **File & Project Management**
 - **Project Explorer** - Hierarchical file tree with real-time updates
 - **Quick File Search** - Instant file access (`Cmd+P`)
+- **Advanced Search** - Full-text search with regex support (`Cmd+Shift+F`)
+- **Search Options** - Case-sensitive, whole-word matching, regex patterns
+- **File Click Navigation** - Click search results to open in editor
 - **File Operations** - Create, edit, delete files and folders
 - **Workspace State Memory** - Automatically saves and restores open files and layouts
 - **Project Path Tracking** - Persistent project directory
@@ -156,8 +164,13 @@ npm run build
 | Shortcut | Action |
 |----------|--------|
 | `Cmd+K` | Inline edit selected code |
-| `Tab` | Accept AI code suggestion |
+| `Cmd+Shift+F` | Open advanced search |
+| `Cmd+Shift+A` | Add file attachment |
+| `Cmd+Shift+I` | Add image attachment |
+| `Cmd+R` | Search command history |
+| `Tab` | Accept AI code suggestion / auto-complete |
 | `Esc` | Dismiss AI suggestion |
+| `/` | Open slash command menu |
 
 ---
 
@@ -166,8 +179,20 @@ npm run build
 ### Chat Panel (`Cmd+Shift+L`)
 - Ask questions about your code
 - Get explanations and suggestions
-- All conversations automatically saved
+- All conversations automatically saved with IndexedDB
 - Access chat history with 📚 button
+- Support for Markdown-formatted responses
+
+### File Attachments
+- **Upload Files**: Click 📎 button or drag-and-drop files into chat
+- **Add from Explorer**: Right-click files → "Add as Attachment"
+- **Image Support**: Upload images for Claude to analyze
+- **Multi-attachment**: Add multiple files to a single message
+- **Smart Paths**: Automatic path resolution for local files
+- **Context Menu**: Three attachment options:
+  - "Add as Attachment" - Add to current chat
+  - "Add as Attachment (New Chat)" - Create new session with attachment
+  - "Add as Image Attachment" - Mark as image type for analysis
 
 ### Inline Editing (`Cmd+K`)
 1. Select code in editor
@@ -179,7 +204,28 @@ npm run build
 - Click 📋 button to view sessions
 - Restore previous conversations
 - Delete unwanted sessions
-- Sessions persist across restarts
+- Rename sessions for better organization
+- Sessions persist across restarts via IndexedDB
+- Create new sessions with `+` button
+
+### Model Selection
+- Click ⚙️ button to switch AI models
+- Available: Opus 4.1 (latest), Sonnet 3.5, Haiku
+- Model selection persists across sessions
+
+### Slash Commands
+- `/help` - Show available commands
+- `/clear` - Clear current conversation
+- `/model` - Check or switch models
+- `/exit` - Close chat session
+- Auto-completion for commands with arrow keys
+
+### Search Features
+- **Current File Search**: Search in currently open file
+- **Project Search**: Search across all project files
+- **Result Navigation**: Click results to jump to file/location
+- **Case-Sensitive**: Toggle for case-sensitive matching
+- **Regex Support**: Use regular expressions for advanced patterns
 
 ### Error Diagnostics
 - Automatic error detection
@@ -206,6 +252,7 @@ npm run build
 | **Terminal** | xterm.js 5.3 |
 | **AI** | Claude API / Claude CLI |
 | **Process** | node-pty 1.0 |
+| **Storage** | IndexedDB + localStorage |
 
 ### Project Structure
 
@@ -220,12 +267,23 @@ claude-studio/
 │   │   ├── ai/
 │   │   │   ├── ClaudeService.js   # AI service manager
 │   │   │   ├── ChatHistoryManager.js  # Conversation history
+│   │   │   ├── CommandParser.js   # Slash command parser
+│   │   │   ├── CommandRegistry.js # Command definitions
+│   │   │   ├── CommandExecutor.js # Command execution
 │   │   │   └── ErrorDiagnostics.js    # Error analysis & fixes
+│   │   ├── attachments/
+│   │   │   ├── AttachmentManager.js    # Attachment handling
+│   │   │   ├── FileValidator.js        # File validation
+│   │   │   └── AttachmentProcessor.js  # Attachment processing
 │   │   ├── files/
 │   │   │   └── FileManager.js     # File operations
 │   │   └── storage/
-│   │       └── WorkspaceState.js  # Workspace persistence
+│   │       ├── WorkspaceState.js  # Workspace persistence
+│   │       └── IndexedDBManager.js # IndexedDB operations
 │   ├── components/                # Reusable UI components
+│   ├── utils/
+│   │   ├── MarkdownRenderer.js    # Markdown rendering
+│   │   └── Shortcuts.js           # Keyboard shortcuts
 │   └── ui/styles/                 # Stylesheets
 ├── index.html                     # Main HTML
 ├── package.json
@@ -300,7 +358,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for gu
 
 See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and updates.
 
-**Latest**: v2.1.1 - Cursor-Style Layout, Terminal Integration, Panel Resizing
+**Latest**: v2.1.1 - Multi-session support, Attachments, Search, Slash Commands
 
 ---
 
@@ -325,6 +383,7 @@ For more issues, check the [Issues](https://github.com/TaylorChen/claude-studio/
 - [Architecture Guide](./ARCHITECTURE.md) - System design and components
 - [Contributing Guide](./CONTRIBUTING.md) - How to contribute
 - [Changelog](./CHANGELOG.md) - Version history
+- [Integration Plan](./plan.md) - Phase-based Claude CLI feature integration roadmap
 
 ---
 
@@ -342,6 +401,8 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 - **[Anthropic](https://www.anthropic.com/)** - Claude AI platform
 - **[VS Code](https://code.visualstudio.com/)** - Design inspiration
 - **[node-pty](https://github.com/microsoft/node-pty)** - Terminal process management
+- **[markdown-it](https://github.com/markdown-it/markdown-it)** - Markdown parser
+- **[highlight.js](https://highlightjs.org/)** - Syntax highlighting
 
 ---
 
@@ -355,12 +416,53 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ## 🗺️ Roadmap
 
+### ✅ Completed Phases
+
+**Phase 1-2: Session Management & Multi-Session Support**
+- [x] Multi-session chat support with tabs
+- [x] Session persistence with IndexedDB
+- [x] Session history search and restore
+- [x] Rename sessions functionality
+
+**Phase 3: Slash Command System**
+- [x] Command parser and registry
+- [x] Built-in commands (/help, /clear, /model, /exit)
+- [x] Command auto-completion
+- [x] Command history search (Ctrl+R / Cmd+R)
+- [x] Arrow key navigation in suggestions
+
+**Phase 4: File Attachments & Search**
+- [x] File attachment upload and management
+- [x] Image attachment support
+- [x] Right-click context menu for attachments
+- [x] Advanced search with multiple file types
+- [x] Search result navigation
+
+### 🚀 Upcoming Phases
+
+**Phase 5: Advanced Features**
+- [ ] Checkpoints (code version control)
+- [ ] Permission management system
+- [ ] Sub-agents system
+- [ ] Extended input options (multi-line, background tasks)
+
+**Phase 6: Extension System**
+- [ ] Hooks lifecycle system
+- [ ] Plugin architecture
+- [ ] Custom command support
+
+**Phase 7: UI/UX Enhancements**
+- [ ] Theme customization
+- [ ] Layout preferences
+- [ ] Accessibility improvements
+
+**Other Features**
 - [ ] Git integration (status, commit, push/pull)
 - [ ] Split editor view
-- [ ] Extension system
 - [ ] Cloud sync for workspace settings
 - [ ] Team collaboration features
 - [ ] More AI models support
+- [ ] Vim editing mode (optional)
 
 ---
 

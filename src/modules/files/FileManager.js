@@ -137,7 +137,7 @@ class FileManager {
         <span class="file-name">${node.name}</span>
       `;
 
-      // 点击事件
+      // 左键点击事件
       item.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (node.type === 'directory') {
@@ -146,6 +146,14 @@ class FileManager {
         } else {
           await this.openFile(node.path);
         }
+      });
+
+      // 右键菜单事件
+      item.addEventListener('contextmenu', (e) => {
+        console.log('🖱️ 右键点击文件树项目:', node.name);
+        e.preventDefault();
+        e.stopPropagation();
+        this.showContextMenu(e, node);
       });
 
       container.appendChild(item);
@@ -443,6 +451,243 @@ class FileManager {
       'yml': 'yaml'
     };
     return map[ext] || 'plaintext';
+  }
+
+  /**
+   * 显示右键菜单
+   * @param {Event} event - 鼠标事件
+   * @param {Object} node - 文件节点
+   */
+  showContextMenu(event, node) {
+    console.log('📋 显示右键菜单，节点类型:', node.type, '路径:', node.path);
+    
+    // 移除之前的菜单
+    const existingMenu = document.getElementById('file-context-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+
+    // 只对文件显示完整菜单
+    if (node.type === 'directory') {
+      console.log('⚠️ 目录不显示菜单，跳过');
+      return;
+    }
+
+    // 创建菜单容器
+    const menu = document.createElement('div');
+    menu.id = 'file-context-menu';
+    menu.className = 'context-menu';
+    menu.style.cssText = `
+      position: fixed;
+      left: ${event.pageX}px;
+      top: ${event.pageY}px;
+      background: var(--bg-tertiary, #2d2d30);
+      border: 1px solid var(--border-color, #3e3e42);
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      z-index: 10000;
+      min-width: 220px;
+      padding: 8px 0;
+    `;
+
+    // 菜单项数据
+    const menuItems = [
+      {
+        label: 'Add File to Claude Chat',
+        icon: '💬',
+        action: () => this.addToClaudeChat(node, false),
+        className: 'menu-item-claude'
+      },
+      {
+        label: 'Add File to New Claude Chat',
+        icon: '✨',
+        action: () => this.addToClaudeChat(node, true),
+        className: 'menu-item-claude'
+      },
+      { divider: true },
+      {
+        label: 'Copy Path',
+        icon: '📋',
+        action: () => this.copyPath(node.path)
+      },
+      {
+        label: 'Copy Relative Path',
+        icon: '📌',
+        action: () => this.copyRelativePath(node.path)
+      },
+      { divider: true },
+      {
+        label: 'Reveal in Finder',
+        icon: '📂',
+        action: () => this.revealInFinder(node.path)
+      }
+    ];
+
+    // 创建菜单项
+    menuItems.forEach((item, index) => {
+      if (item.divider) {
+        const divider = document.createElement('div');
+        divider.style.cssText = `
+          height: 1px;
+          background: var(--border-color, #3e3e42);
+          margin: 4px 0;
+        `;
+        menu.appendChild(divider);
+      } else {
+        const menuItem = document.createElement('div');
+        menuItem.className = `menu-item ${item.className || ''}`;
+        menuItem.style.cssText = `
+          padding: 8px 12px;
+          cursor: pointer;
+          color: var(--text-primary, #cccccc);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          transition: background 0.15s ease;
+          user-select: none;
+        `;
+
+        menuItem.innerHTML = `
+          <span style="font-size: 14px;">${item.icon}</span>
+          <span>${item.label}</span>
+        `;
+
+        menuItem.addEventListener('mouseenter', () => {
+          menuItem.style.background = 'var(--bg-hover, #2a2d2e)';
+        });
+
+        menuItem.addEventListener('mouseleave', () => {
+          menuItem.style.background = 'transparent';
+        });
+
+        menuItem.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log('✅ 点击菜单项:', item.label);
+          item.action();
+          menu.remove();
+        });
+
+        menu.appendChild(menuItem);
+      }
+    });
+
+    console.log('✅ 菜单已创建，共 ' + menuItems.length + ' 项');
+    console.log('📍 菜单位置: x=' + event.pageX + ', y=' + event.pageY);
+    document.body.appendChild(menu);
+    console.log('✅ 菜单已添加到 DOM');
+
+    // 点击其他地方关闭菜单
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+      }
+    };
+
+    setTimeout(() => {
+      document.addEventListener('click', closeMenu);
+    }, 0);
+  }
+
+  /**
+   * 添加文件到 Claude 聊天
+   * @param {Object} node - 文件节点
+   * @param {boolean} isNew - 是否创建新聊天
+   */
+  async addToClaudeChat(node, isNew) {
+    try {
+      // 读取文件内容
+      const result = await window.electronAPI.readFile(node.path);
+      if (!result.success) {
+        alert('Failed to read file: ' + result.error);
+        return;
+      }
+
+      const fileContent = result.content;
+      const fileName = node.name;
+
+      // 构建消息
+      const message = `I'm adding a file to our chat:\n\n**File: ${fileName}**\n\n\`\`\`\n${fileContent}\n\`\`\``;
+
+      // 通过全局接口与 AI 聊天组件通信
+      if (window.aiChat) {
+        if (isNew) {
+          // 创建新会话
+          window.aiChat.createNewSession();
+          // 稍微延迟后发送消息，确保新会话已创建
+          setTimeout(() => {
+            window.aiChat.inputElement.value = message;
+            window.aiChat.inputElement.focus();
+            console.log('✅ 文件已添加到新 Claude 聊天窗口');
+          }, 100);
+        } else {
+          // 添加到现有聊天
+          window.aiChat.inputElement.value = message;
+          window.aiChat.inputElement.focus();
+          console.log('✅ 文件已添加到 Claude 聊天窗口');
+        }
+      } else {
+        alert('Claude Chat Component not found. Make sure AI Chat is initialized.');
+      }
+    } catch (error) {
+      console.error('❌ 添加文件到聊天失败:', error);
+      alert('Failed to add file to chat: ' + error.message);
+    }
+  }
+
+  /**
+   * 复制文件路径
+   * @param {string} filePath - 文件路径
+   */
+  copyPath(filePath) {
+    navigator.clipboard.writeText(filePath).then(() => {
+      console.log('✅ 路径已复制到剪贴板');
+      this.showNotification('Path copied to clipboard');
+    }).catch(err => {
+      console.error('❌ 复制失败:', err);
+    });
+  }
+
+  /**
+   * 复制相对路径
+   * @param {string} filePath - 文件路径
+   */
+  copyRelativePath(filePath) {
+    const relativePath = './' + filePath;
+    navigator.clipboard.writeText(relativePath).then(() => {
+      console.log('✅ 相对路径已复制到剪贴板');
+      this.showNotification('Relative path copied to clipboard');
+    }).catch(err => {
+      console.error('❌ 复制失败:', err);
+    });
+  }
+
+  /**
+   * 在 Finder 中显示文件
+   * @param {string} filePath - 文件路径
+   */
+  revealInFinder(filePath) {
+    if (window.electronAPI && window.electronAPI.revealInFinder) {
+      window.electronAPI.revealInFinder(filePath);
+      console.log('✅ 在 Finder 中打开');
+    } else {
+      console.warn('⚠️ revealInFinder API not available');
+    }
+  }
+
+  /**
+   * 显示通知
+   * @param {string} message - 通知消息
+   */
+  showNotification(message) {
+    // 如果有全局 toast 对象，使用它
+    if (typeof toast !== 'undefined' && toast.show) {
+      toast.show(message, 'info', 2000);
+    } else {
+      console.log(message);
+    }
   }
 }
 
