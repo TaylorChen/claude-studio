@@ -493,31 +493,31 @@ class FileManager {
     // 菜单项数据
     const menuItems = [
       {
-        label: 'Add File to Claude Chat',
+        label: '添加到 Claude 对话',
         icon: '💬',
         action: () => this.addToClaudeChat(node, false),
         className: 'menu-item-claude'
       },
       {
-        label: 'Add File to New Claude Chat',
+        label: '添加到新 Claude 对话',
         icon: '✨',
         action: () => this.addToClaudeChat(node, true),
         className: 'menu-item-claude'
       },
       { divider: true },
       {
-        label: 'Copy Path',
+        label: '复制路径',
         icon: '📋',
         action: () => this.copyPath(node.path)
       },
       {
-        label: 'Copy Relative Path',
+        label: '复制相对路径',
         icon: '📌',
         action: () => this.copyRelativePath(node.path)
       },
       { divider: true },
       {
-        label: 'Reveal in Finder',
+        label: '在 Finder 中显示',
         icon: '📂',
         action: () => this.revealInFinder(node.path)
       }

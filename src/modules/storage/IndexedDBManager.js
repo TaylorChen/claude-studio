@@ -264,6 +264,97 @@ class IndexedDBManager {
         console.log('⚠️ 数据不一致：IndexedDB=' + idbSessionCount + ', localStorage=' + localSessionCount);
         return { consistent: false, storage: 'both', idbCount: idbSessionCount, localCount: localSessionCount };
     }
+
+    /**
+     * 保存检查点数据 (Phase 4)
+     * @param {Object} data - 检查点数据
+     * @returns {Promise<boolean>} 是否成功保存
+     */
+    async saveCheckpoints(data) {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return false;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readwrite');
+            const store = transaction.objectStore(this.storeName);
+
+            const checkpointData = {
+                id: 'claude_checkpoints',
+                checkpoints: data.checkpoints,
+                branches: data.branches,
+                currentBranch: data.currentBranch,
+                savedAt: data.savedAt,
+                version: 1
+            };
+
+            // 先删除旧数据
+            const deleteRequest = store.delete('claude_checkpoints');
+            
+            deleteRequest.onsuccess = () => {
+                // 添加新数据
+                const addRequest = store.add(checkpointData);
+
+                addRequest.onerror = () => {
+                    console.error('❌ 保存检查点失败:', addRequest.error);
+                    resolve(false);
+                };
+
+                addRequest.onsuccess = () => {
+                    console.log('✓ 检查点已保存到 IndexedDB');
+                    resolve(true);
+                };
+            };
+
+            deleteRequest.onerror = () => {
+                console.error('❌ 删除旧检查点失败:', deleteRequest.error);
+                resolve(false);
+            };
+
+            transaction.onerror = () => {
+                console.error('❌ 事务失败:', transaction.error);
+                resolve(false);
+            };
+        });
+    }
+
+    /**
+     * 加载检查点数据 (Phase 4)
+     * @returns {Promise<Object|null>} 检查点数据
+     */
+    async loadCheckpoints() {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readonly');
+            const store = transaction.objectStore(this.storeName);
+            const request = store.get('claude_checkpoints');
+
+            request.onerror = () => {
+                console.error('❌ 加载检查点失败:', request.error);
+                resolve(null);
+            };
+
+            request.onsuccess = () => {
+                const result = request.result;
+                if (result) {
+                    console.log('✓ 检查点已从 IndexedDB 加载');
+                    resolve({
+                        checkpoints: result.checkpoints,
+                        branches: result.branches,
+                        currentBranch: result.currentBranch
+                    });
+                } else {
+                    console.log('ℹ️ IndexedDB 中没有保存的检查点');
+                    resolve(null);
+                }
+            };
+        });
+    }
 }
 
 // 导出全局实例

@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2025-11-10
+
+### 🎯 Phase 5 Complete - UI/UX Enhancement & Chinese Localization
+
+#### ✨ Added
+
+**标签页右键菜单系统 (Tab Context Menu System)**
+- ✅ 单击标签页切换文件
+- ✅ 右键菜单显示 10+ 个操作
+- ✅ VS Code 风格菜单设计
+- ✅ 菜单操作包括:
+  - 关闭、关闭其他、关闭右侧、关闭全部
+  - 复制路径、复制相对路径
+  - 固定标签、重新打开
+  - 在 Finder 中显示、在文件树中定位
+  - 分割窗口 (上下左右四个方向)
+
+**中文本地化 (Chinese Localization)**
+- ✅ 文件树菜单完整中文翻译 (13 个菜单项)
+- ✅ 菜单项分类:
+  - Claude 对话相关 (4 项)
+  - 附件相关 (3 项)
+  - 路径相关 (4 项)
+  - Finder 相关 (2 项)
+- ✅ 所有功能保持完整
+- ✅ 所有外观保持不变
+
+#### 🔧 Technical Details
+- 修改文件:
+  - `src/renderer/app.js` (+95 行代码)
+  - `src/modules/files/FileManager.js` (+20 行代码)
+- 新增组件:
+  - `src/components/TabContextMenu.js` (300+ 行)
+- 样式更新:
+  - `src/ui/styles/main.css` (100+ 行)
+
+#### 🎯 Phase 4 Complete - Checkpoints (代码版本控制)
+
+#### ✨ Added
+
+**检查点管理系统 (Checkpoint Management System)**
+- **CheckpointManager** - 完整的版本控制系统
+  - ✅ 自动创建检查点 (编辑时)
+  - ✅ 手动创建检查点 (支持添加描述)
+  - ✅ 检查点历史记录 (最多 50 个,可配置)
+  - ✅ 回退到任意检查点
+  - ✅ 差异对比 (additions/deletions/changes)
+  - ✅ 分支管理 (创建、切换、合并分支)
+  - ✅ 检查点导出/导入 (JSON 格式)
+  - ✅ 双重持久化 (IndexedDB + localStorage)
+
+**检查点面板 UI (Checkpoint Panel Component)**
+- ✅ 可视化时间线视图
+- ✅ 文件过滤 (当前文件/所有文件)
+- ✅ 一键恢复功能
+- ✅ Diff 统计信息显示
+- ✅ 检查点删除和管理
+- ✅ 分支切换器
+- ✅ 检查点统计信息
+- ✅ 完整的 UI 样式和交互
+
+**存储系统扩展**
+- ✅ IndexedDB 支持检查点存储
+- ✅ saveCheckpoints() 和 loadCheckpoints() 方法
+- ✅ 自动降级到 localStorage
+
+#### 📝 Technical Details
+- 新增文件:
+  - `src/modules/editor/CheckpointManager.js` (600+ 行)
+  - `src/components/CheckpointPanelComponent.js` (850+ 行)
+  - Checkpoint CSS 样式 (400+ 行)
+- 更新文件:
+  - `src/modules/storage/IndexedDBManager.js` (+95 行)
+  - `index.html` (+18 行)
+  - `DEVELOPMENT-STATUS.md`
+  - `package.json` (version 2.3.0)
+
+#### 🎉 Milestones
+- ✅ Phase 4 完全实现
+- ✅ MVP-4.1 (基础检查点) 完成
+- ✅ MVP-4.2 (检查点增强) 完成
+- ✅ 代码历史记录和回退功能生产就绪
+
+---
+
 ## [2.2.0] - 2025-11-10
 
 ### 🚀 Major Update - Attachments, Search & Context Integration

@@ -269,7 +269,10 @@
 
     activateTab(filePath) {
       // 更新激活状态
-      this.openTabs.forEach(tab => tab.isActive = (tab.path === filePath));
+      this.openTabs.forEach(tab => {
+        tab.isActive = tab.path === filePath;
+      });
+      
       this.renderTabs();
     }
 
@@ -327,7 +330,6 @@
     switchTab(filePath) {
       const model = this.models.get(filePath);
       if (!model) {
-        console.warn('⚠️ 标签对应的模型不存在:', filePath);
         return;
       }
 
@@ -349,8 +351,6 @@
       store.setState('editor.activeFile', filePath);
       this.activateTab(filePath);
       this.editor.focus();
-
-      const fileName = filePath.split('/').pop();
     }
 
     renderTabs() {
@@ -386,17 +386,27 @@
           <span class="tab-close">×</span>
         `;
 
-        // 点击标签切换文件
+        // 单击标签切换文件
         tabElement.addEventListener('click', (e) => {
-          if (!e.target.classList.contains('tab-close')) {
+          // 如果点击的是关闭按钮,关闭标签
+          if (e.target.classList.contains('tab-close')) {
+            e.stopPropagation();
+            this.closeTab(tab.path, e);
+          } else {
+            // 单击切换标签
             this.switchTab(tab.path);
           }
         });
 
-        // 点击关闭按钮
-        const closeBtn = tabElement.querySelector('.tab-close');
-        closeBtn.addEventListener('click', (e) => {
-          this.closeTab(tab.path, e);
+        // 右键显示上下文菜单
+        tabElement.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // 显示右键菜单
+          if (window.tabContextMenu && typeof window.tabContextMenu.show === 'function') {
+            window.tabContextMenu.show(tab.path, e);
+          }
         });
 
         this.tabsContainer.appendChild(tabElement);
@@ -901,50 +911,50 @@
       // 菜单项数据
       const menuItems = [
         {
-          label: 'Add File to Claude Chat',
+          label: '添加到 Claude 对话',
           icon: '💬',
           action: () => this.addToClaudeChat(node, false),
           className: 'menu-item-claude'
         },
         {
-          label: 'Add File to New Claude Chat',
+          label: '添加到新 Claude 对话',
           icon: '✨',
           action: () => this.addToClaudeChat(node, true),
           className: 'menu-item-claude'
         },
         { divider: true },
         {
-          label: 'Add as Attachment',
+          label: '添加为附件',
           icon: '📎',
           action: () => this.addFileAsAttachment(node),
           className: 'menu-item-attachment'
         },
         {
-          label: 'Add as Attachment (New Chat)',
+          label: '添加为附件(新对话)',
           icon: '📎✨',
           action: () => this.addFileAsAttachmentNew(node),
           className: 'menu-item-attachment'
         },
         {
-          label: 'Add as Image Attachment',
+          label: '添加为图片附件',
           icon: '🖼️',
           action: () => this.addFileAsAttachmentImage(node),
           className: 'menu-item-attachment'
         },
         { divider: true },
         {
-          label: 'Copy Path',
+          label: '复制路径',
           icon: '📋',
           action: () => this.copyPath(node.path)
         },
         {
-          label: 'Copy Relative Path',
+          label: '复制相对路径',
           icon: '📌',
           action: () => this.copyRelativePath(node.path)
         },
         { divider: true },
         {
-          label: 'Reveal in Finder',
+          label: '在 Finder 中显示',
           icon: '📂',
           action: () => this.revealInFinder(node.path)
         }
@@ -1818,6 +1828,11 @@
           this.setupCodeCompletion();
           // 初始化错误诊断（需要 ErrorDiagnostics 模块）
           this.initErrorDiagnostics();
+        }
+
+        // 初始化标签页右键菜单
+        if (typeof TabContextMenu !== 'undefined') {
+          window.tabContextMenu = new TabContextMenu(this.editor);
         }
 
         // 初始化面包屑路径容器（在这里初始化，而不是在 EditorManager）

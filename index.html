@@ -184,6 +184,11 @@
                 </div>
             </div>
         </div>
+
+        <!-- 检查点面板 (Phase 4) -->
+        <div id="checkpoint-panel" class="checkpoint-panel" style="display: none; position: fixed; right: 20px; top: 60px; bottom: 60px; width: 400px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;">
+            <!-- 检查点面板内容由 CheckpointPanelComponent 渲染 -->
+        </div>
     </div>
 
     <!-- 状态栏 -->
@@ -311,6 +316,8 @@
                 loadComponentWithErrorHandling('src/components/MonacoEditor.js', 'MonacoEditor');
                 loadComponentWithErrorHandling('src/components/AIChatComponent.js', 'AIChatComponent');
                 loadComponentWithErrorHandling('src/components/SessionListComponent.js', 'SessionListComponent');
+                loadComponentWithErrorHandling('src/components/CheckpointPanelComponent.js', 'CheckpointPanelComponent');
+                loadComponentWithErrorHandling('src/components/TabContextMenu.js', 'TabContextMenu');
                 
                 // 加载 Managers 和 Dialogs，带错误处理
                 var exportImportScript = document.createElement('script');
@@ -344,6 +351,22 @@
                 document.body.appendChild(promptManagerScript);
 
                 loadComponentWithErrorHandling('src/components/SystemPromptDialog.js', 'SystemPromptDialog');
+                
+                // 加载检查点管理器 (Phase 4)
+                var checkpointManagerScript = document.createElement('script');
+                checkpointManagerScript.src = 'src/modules/editor/CheckpointManager.js';
+                checkpointManagerScript.onload = function() {
+                    console.log('✓ 加载成功: CheckpointManager');
+                    if (typeof CheckpointManager !== 'undefined') {
+                        window.checkpointManager = new CheckpointManager();
+                    }
+                    checkAndLoadApp();
+                };
+                checkpointManagerScript.onerror = function() {
+                    console.error('❌ 加载失败: CheckpointManager');
+                    checkAndLoadApp();
+                };
+                document.body.appendChild(checkpointManagerScript);
                 
                 var templateLibScript = document.createElement('script');
                 templateLibScript.src = 'src/modules/ai/PromptTemplateLibrary.js';

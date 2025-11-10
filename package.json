@@ -1,7 +1,7 @@
 {
   "name": "claude-studio",
   "productName": "CLAUDE-STUDIO",
-  "version": "2.1.1",
+  "version": "2.3.0",
   "description": "AI-First IDE - Modern code editor powered by Claude AI",
   "main": "src/main.js",
   "scripts": {

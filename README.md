@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.1.1-blue.svg)
+![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Electron](https://img.shields.io/badge/electron-27.0.0-blue.svg)
 ![Monaco Editor](https://img.shields.io/badge/monaco--editor-0.44.0-blue.svg)
@@ -23,6 +23,7 @@ A modern code editor designed for AI-assisted development, built with Electron a
 - **Monaco Editor** - The same editor that powers VS Code
 - **Multi-Tab Support** - Work on multiple files with keyboard shortcuts (`Cmd+Tab`, `Cmd+Shift+Tab`)
 - **Smart Tab Management** - Close tabs with `Cmd+W`, automatic next tab selection
+- **Tab Context Menu** - Right-click menu on tabs with 10+ operations (close, copy path, split, etc.)
 - **Syntax Highlighting** - Support for 100+ programming languages
 - **IntelliSense** - Intelligent code completion and suggestions
 - **Real-time Status Bar** - Line/column position, file type, cursor tracking
@@ -67,6 +68,7 @@ A modern code editor designed for AI-assisted development, built with Electron a
 - **Smooth Animations** - Polished UI transitions
 - **Diff Preview** - Visual code change comparison
 - **Markdown Support** - Formatted AI responses
+- **Chinese Localization** - Full Chinese UI support for menus and commands
 
 ---
 

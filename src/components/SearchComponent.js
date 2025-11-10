@@ -237,30 +237,13 @@ class SearchComponent {
     detectMVPFiles() {
         const files = [];
         
-        // MVP 相关文件模式
+        // Core documentation files
         const mvpPatterns = [
-            'MVP-1.1-IMPLEMENTATION.md',
-            'MVP-1.2-IMPLEMENTATION.md',
-            'MVP-1.3-IMPLEMENTATION.md',
-            'MVP-2.1-IMPLEMENTATION.md',
-            'MVP-3.3-PHASE1-IMPLEMENTATION-SUMMARY.md',
-            'MVP-3.3-PHASE1-TESTING.md',
-            'MVP-3.3-PHASE2-DELIVERABLES.md',
-            'MVP-3.3-PHASE2-EXTENSION-GUIDE.md',
-            'MVP-3.3-PHASE2-FINAL-REPORT.md',
-            'MVP-3.3-PHASE2-IMPLEMENTATION.md',
-            'MVP-3.3-PHASE2-QUICK-TEST.md',
-            'MVP-3.3-PHASE2-SUMMARY.md',
-            'MVP-3.3-PHASE2-TESTING.md',
-            'MVP-3.3-PHASE2-VALIDATION.js',
-            'MVP-3.3-PHASE3-DAY1-SUMMARY.md',
-            'MVP-3.3-PHASE3-DAY2-PLAN.md',
-            'MVP-3.3-PHASE3-DAY2-SUMMARY.md',
-            'MVP-3.3-PHASE3-DAY3-FINAL-TESTING.md',
-            'MVP-3.3-PHASE3-FINAL-REPORT.md',
-            'MVP-3.3-PHASE3-PLAN.md',
-            'MVP-3.3-PLAN.md',
-            'plan.md'
+            'README.md',
+            'CHANGELOG.md',
+            'ARCHITECTURE.md',
+            'CONTRIBUTING.md',
+            'DEVELOPMENT-STATUS.md'
         ];
         
         // 转换为文件对象
