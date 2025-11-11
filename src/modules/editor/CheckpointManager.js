@@ -23,7 +23,6 @@ class CheckpointManager {
       this.initialized = true;
       console.log('✓ 检查点管理器已初始化');
     } catch (error) {
-      console.error('❌ 检查点管理器初始化失败:', error);
       this.checkpoints = [];
       this.initialized = true;
     }
@@ -101,7 +100,6 @@ class CheckpointManager {
 
     // 持久化
     this.saveCheckpoints().catch(err => {
-      console.error('❌ 保存检查点失败:', err);
     });
 
     console.log(`✓ 创建检查点: ${checkpoint.description} (${filePath})`);
@@ -172,7 +170,6 @@ class CheckpointManager {
     }
 
     this.saveCheckpoints().catch(err => {
-      console.error('❌ 保存检查点失败:', err);
     });
 
     return true;
@@ -198,7 +195,6 @@ class CheckpointManager {
     }
 
     this.saveCheckpoints().catch(err => {
-      console.error('❌ 保存检查点失败:', err);
     });
   }
 
@@ -353,7 +349,6 @@ class CheckpointManager {
         console.log(`✓ 从 localStorage 加载了 ${this.checkpoints.length} 个检查点`);
       }
     } catch (error) {
-      console.error('❌ 加载检查点失败:', error);
       throw error;
     }
   }
@@ -374,7 +369,6 @@ class CheckpointManager {
       if (window.indexedDBManager && window.indexedDBManager.isSupported && window.indexedDBManager.db) {
         const success = await window.indexedDBManager.saveCheckpoints(data);
         if (success) {
-          console.log('💾 检查点已保存到 IndexedDB');
           // 同时保留 localStorage 备份
           localStorage.setItem('claude_checkpoints', JSON.stringify(data));
           return;
@@ -383,9 +377,7 @@ class CheckpointManager {
 
       // 降级到 localStorage
       localStorage.setItem('claude_checkpoints', JSON.stringify(data));
-      console.log('💾 检查点已保存到 localStorage');
     } catch (error) {
-      console.error('❌ 保存检查点失败:', error);
     }
   }
 
@@ -437,13 +429,11 @@ class CheckpointManager {
       }
 
       this.saveCheckpoints().catch(err => {
-        console.error('❌ 保存检查点失败:', err);
       });
 
       console.log(`✓ 导入了 ${newCheckpoints.length} 个检查点`);
       return true;
     } catch (error) {
-      console.error('❌ 导入检查点失败:', error);
       return false;
     }
   }

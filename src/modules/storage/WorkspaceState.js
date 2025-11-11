@@ -28,10 +28,8 @@ class WorkspaceState {
     try {
       const state = this.collectState();
       localStorage.setItem(this.storageKey, JSON.stringify(state));
-      console.log('✅ 工作区状态已保存', state);
       return true;
     } catch (error) {
-      console.error('❌ 保存工作区状态失败:', error);
       return false;
     }
   }
@@ -43,15 +41,12 @@ class WorkspaceState {
     try {
       const saved = localStorage.getItem(this.storageKey);
       if (!saved) {
-        console.log('📝 没有找到保存的工作区状态');
         return null;
       }
 
       const state = JSON.parse(saved);
-      console.log('✅ 工作区状态已恢复', state);
       return state;
     } catch (error) {
-      console.error('❌ 恢复工作区状态失败:', error);
       return null;
     }
   }
@@ -173,7 +168,6 @@ class WorkspaceState {
     if (!state) return;
 
     try {
-      console.log('🔄 正在恢复工作区状态...');
 
       // 恢复 UI 布局
       if (state.ui) {
@@ -198,9 +192,7 @@ class WorkspaceState {
         }
       }
 
-      console.log('✅ 工作区状态恢复完成');
     } catch (error) {
-      console.error('❌ 应用工作区状态失败:', error);
     }
   }
 
@@ -231,7 +223,6 @@ class WorkspaceState {
       document.body.setAttribute('data-theme', uiState.theme);
     }
 
-    console.log('✅ UI 状态已恢复');
   }
 
   /**
@@ -252,7 +243,6 @@ class WorkspaceState {
           // 在编辑器中打开
           await app.editor.openFile(tab.path, content);
           
-          console.log(`✅ 已恢复标签: ${tab.title}`);
         } catch (error) {
           console.warn(`⚠️  无法恢复标签: ${tab.title}`, error);
         }
@@ -281,9 +271,7 @@ class WorkspaceState {
         }, 200);
       }
 
-      console.log('✅ 编辑器状态已恢复');
     } catch (error) {
-      console.error('❌ 恢复编辑器状态失败:', error);
     }
   }
 
@@ -325,10 +313,8 @@ class WorkspaceState {
   clearState() {
     try {
       localStorage.removeItem(this.storageKey);
-      console.log('✅ 工作区状态已清除');
       return true;
     } catch (error) {
-      console.error('❌ 清除工作区状态失败:', error);
       return false;
     }
   }
@@ -357,10 +343,8 @@ class WorkspaceState {
       const text = await file.text();
       const state = JSON.parse(text);
       localStorage.setItem(this.storageKey, text);
-      console.log('✅ 工作区状态已导入');
       return state;
     } catch (error) {
-      console.error('❌ 导入工作区状态失败:', error);
       return null;
     }
   }

@@ -20,6 +20,7 @@ class MonacoEditorComponent {
             // 确保Monaco已加载
             if (!window.monaco) {
                 await this.loadMonaco();
+            } else {
             }
 
             const container = document.getElementById(this.containerId);
@@ -62,12 +63,14 @@ class MonacoEditorComponent {
                 }
             });
 
+            // 注册常用语言支持
+            this.registerLanguages();
+
             // 绑定事件
             this.bindEvents();
 
             return this.editor;
         } catch (error) {
-            console.error('❌ Monaco Editor 初始化失败:', error);
             throw error;
         }
     }
@@ -92,6 +95,35 @@ class MonacoEditorComponent {
                 resolve(window.monaco);
             }, reject);
         });
+    }
+
+    /**
+     * 检查语言支持（语言已在 HTML 中预加载）
+     */
+    registerLanguages() {
+        try {
+            
+            if (!window.monaco) {
+                return;
+            }
+
+            if (!window.monaco.languages) {
+                return;
+            }
+
+            // 语言已在 index.html 中预加载，这里只做检查
+            const registeredLanguages = window.monaco.languages.getLanguages();
+            
+            const langIds = registeredLanguages.map(l => l.id);
+            
+            // 检查关键语言是否存在
+            const requiredLangs = ['php', 'python', 'go', 'html', 'javascript'];
+            requiredLangs.forEach(lang => {
+                const exists = langIds.includes(lang);
+            });
+
+        } catch (error) {
+        }
     }
 
     /**
@@ -123,6 +155,11 @@ class MonacoEditorComponent {
      */
     openFile(filePath, content, language) {
         try {
+            
+            // 首先检查请求的语言是否存在
+            const allLangs = monaco.languages.getLanguages();
+            const langExists = allLangs.some(l => l.id === language);
+            
             // 检查是否已有该文件的模型
             let model = this.models.get(filePath);
 
@@ -131,6 +168,12 @@ class MonacoEditorComponent {
                 const uri = monaco.Uri.file(filePath);
                 model = monaco.editor.createModel(content, language, uri);
                 this.models.set(filePath, model);
+                const actualLang = model.getLanguageId();
+                
+                // 如果语言不匹配，说明请求的语言不存在
+                if (actualLang !== language) {
+                    console.warn(`⚠️ [MonacoEditor.openFile] 语言不匹配! 请求: ${language}, 实际: ${actualLang}`);
+                }
             } else {
                 // 更新现有模型的内容
                 model.setValue(content);
@@ -141,12 +184,55 @@ class MonacoEditorComponent {
             this.currentModel = model;
 
             // 设置语言
-            if (language) {
+            if (language && langExists) {
                 monaco.editor.setModelLanguage(model, language);
+                const finalLang = model.getLanguageId();
+                
+                // 诊断：检查 tokenization 和主题
+                setTimeout(() => {
+                    try {
+                        
+                        // 1. 检查模型的语言
+                        const modelLang = model.getLanguageId();
+                        console.log(`   模型语言 ID: ${modelLang}`);
+                        
+                        // 2. 检查当前主题
+                        const currentTheme = monaco.editor.getTheme ? monaco.editor.getTheme() : 'unknown';
+                        console.log(`   当前主题: ${currentTheme}`);
+                        
+                        // 3. 检查语言配置
+                        const langConfig = monaco.languages.getLanguages().find(l => l.id === language);
+                        console.log(`   语言配置:`, langConfig);
+                        
+                        // 4. 尝试获取 tokenization state
+                        const lineCount = Math.min(3, model.getLineCount());
+                        console.log(`   检查前 ${lineCount} 行的内容:`);
+                        for (let i = 1; i <= lineCount; i++) {
+                            const lineContent = model.getLineContent(i);
+                            console.log(`     行 ${i}: "${lineContent}"`);
+                        }
+                        
+                        // 5. 检查是否有 tokenization provider
+                        if (monaco.languages.setMonarchTokensProvider) {
+                        } else {
+                        }
+                        
+                        // 6. 检查编辑器的实际渲染状态
+                        const editorModel = this.editor.getModel();
+                        if (editorModel) {
+                            console.log(`   编辑器模型语言: ${editorModel.getLanguageId()}`);
+                            console.log(`   编辑器模型 URI: ${editorModel.uri.toString()}`);
+                        }
+                        
+                    } catch (error) {
+                    }
+                }, 200);
+            } else if (!langExists) {
+                console.warn(`⚠️ [MonacoEditor.openFile] 无法设置语言 '${language}' - 该语言未注册`);
             }
+            
 
         } catch (error) {
-            console.error('打开文件失败:', error);
         }
     }
 

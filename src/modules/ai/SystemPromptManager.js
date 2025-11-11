@@ -231,7 +231,6 @@ Key characteristics:
         localStorage.setItem('claude_system_prompts', JSON.stringify(data));
       }
     } catch (error) {
-      console.error('❌ 保存提示失败:', error);
     }
   }
 
@@ -250,7 +249,6 @@ Key characteristics:
         this.customPrompts = parsed.customPrompts || [];
       }
     } catch (error) {
-      console.error('❌ 加载提示失败:', error);
     }
   }
 

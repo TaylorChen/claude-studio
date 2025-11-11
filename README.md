@@ -54,12 +54,14 @@ A modern code editor designed for AI-assisted development, built with Electron a
 - **Project Path Tracking** - Persistent project directory
 
 ### 🛠️ **Developer Tools**
-- **Integrated Terminal** - Built-in terminal with xterm.js
+- **Integrated Terminal** - Built-in terminal with xterm.js, full shell support
+- **Terminal Features** - 50,000 line scrollback, mouse wheel support, multi-terminal
+- **Code Checkpoints** - Version control for code editing with diff preview
 - **Resizable Panels** - Drag-to-resize sidebar and AI panel
 - **Toast Notifications** - Non-intrusive status messages
 - **Customizable Layout** - Panel visibility toggles
 - **Keyboard Shortcuts** - Complete keyboard navigation
-- **Git Integration** - (Planned) Version control support
+- **Multi-Window Support** - Open multiple projects independently
 
 ### 🎯 **User Experience**
 - **Auto-Save** - Work state saved every 30 seconds
@@ -360,7 +362,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](./CONTRIBUTING.md) for gu
 
 See [CHANGELOG.md](./CHANGELOG.md) for detailed version history and updates.
 
-**Latest**: v2.1.1 - Multi-session support, Attachments, Search, Slash Commands
+**Latest**: v2.3.0 - Multi-window support, PHP highlighting, Terminal enhancements, Checkpoints
 
 ---
 
@@ -420,51 +422,70 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ### ✅ Completed Phases
 
-**Phase 1-2: Session Management & Multi-Session Support**
+**Phase 1: Session Management**
 - [x] Multi-session chat support with tabs
 - [x] Session persistence with IndexedDB
 - [x] Session history search and restore
-- [x] Rename sessions functionality
+- [x] Session export/import
+
+**Phase 2: System Prompt Customization**
+- [x] Custom AI behavior and roles
+- [x] Multiple preset templates
+- [x] Real-time prompt switching
 
 **Phase 3: Slash Command System**
 - [x] Command parser and registry
 - [x] Built-in commands (/help, /clear, /model, /exit)
 - [x] Command auto-completion
 - [x] Command history search (Ctrl+R / Cmd+R)
-- [x] Arrow key navigation in suggestions
 
-**Phase 4: File Attachments & Search**
-- [x] File attachment upload and management
-- [x] Image attachment support
-- [x] Right-click context menu for attachments
-- [x] Advanced search with multiple file types
-- [x] Search result navigation
+**Phase 4: Code Checkpoints**
+- [x] Automatic checkpoint creation
+- [x] Manual checkpoint creation
+- [x] Checkpoint comments and descriptions
+- [x] Checkpoint history and diff preview
+- [x] Rollback functionality
+
+**Phase 5: Tab Menu & Localization**
+- [x] Tab context menu (10+ operations)
+- [x] File tree context menu
+- [x] Chinese localization
+- [x] Menu translations
+
+**Additional: Multi-Window & Enhancements**
+- [x] Multi-window project support (completely isolated)
+- [x] PHP syntax highlighting
+- [x] Multi-language support (90+ languages)
+- [x] Terminal enhancements (50,000 line scrollback)
+- [x] xterm.js full integration
 
 ### 🚀 Upcoming Phases
 
-**Phase 5: Advanced Features**
-- [ ] Checkpoints (code version control)
-- [ ] Permission management system
-- [ ] Sub-agents system
-- [ ] Extended input options (multi-line, background tasks)
+**Phase 6: Permission Management (Planned)**
+- [ ] Tool permission control
+- [ ] AI capability restrictions
+- [ ] User role management
+- [ ] Audit logging
 
-**Phase 6: Extension System**
-- [ ] Hooks lifecycle system
-- [ ] Plugin architecture
-- [ ] Custom command support
+**Phase 7: Extended Features (Planned)**
+- [ ] Multi-line input
+- [ ] Enhanced bash integration
+- [ ] Image support improvements
+- [ ] Keyboard customization
 
-**Phase 7: UI/UX Enhancements**
-- [ ] Theme customization
-- [ ] Layout preferences
-- [ ] Accessibility improvements
+**Phase 8: Performance Optimization (Planned)**
+- [ ] Large file handling
+- [ ] Virtual scrolling
+- [ ] Memory optimization
+- [ ] Startup time optimization
 
-**Other Features**
+**Other Long-term Features**
 - [ ] Git integration (status, commit, push/pull)
 - [ ] Split editor view
 - [ ] Cloud sync for workspace settings
 - [ ] Team collaboration features
 - [ ] More AI models support
-- [ ] Vim editing mode (optional)
+- [ ] Plugin system
 
 ---
 

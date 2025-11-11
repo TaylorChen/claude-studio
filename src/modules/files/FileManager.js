@@ -6,7 +6,8 @@
 const store = require('../../store');
 
 class FileManager {
-  constructor() {
+  constructor(windowId = null) {
+    this.windowId = windowId || `window-${Date.now()}-${Math.random()}`;
     this.projectPath = null;
     this.fileTree = null;
     this.watcher = null;
@@ -36,16 +37,33 @@ class FileManager {
 
   /**
    * 加载文件树
+   * @param {string} projectPath - 项目路径（可选，用于强制加载特定项目）
    * @returns {Promise<void>}
    */
-  async loadFileTree() {
-    const result = await window.electronAPI.listFiles();
-    
-    if (result.success) {
-      // 构建树形结构
-      const tree = this.buildTree(result.files);
-      this.fileTree = tree;
-      store.setState('files.fileTree', tree);
+  async loadFileTree(projectPath = null) {
+    try {
+      // 如果提供了项目路径，更新到本地
+      if (projectPath) {
+        this.projectPath = projectPath;
+      }
+      
+      
+      const result = await window.electronAPI.listFiles();
+      
+      if (result.success) {
+        // 构建树形结构
+        const tree = this.buildTree(result.files);
+        this.fileTree = tree;
+        
+        // 只更新当前窗口的状态（通过本地存储）
+        if (!this.projectPath && result.success) {
+          const projectDir = await window.electronAPI.getProjectDir();
+          this.projectPath = projectDir;
+        }
+        
+      } else {
+      }
+    } catch (error) {
     }
   }
 
@@ -150,7 +168,6 @@ class FileManager {
 
       // 右键菜单事件
       item.addEventListener('contextmenu', (e) => {
-        console.log('🖱️ 右键点击文件树项目:', node.name);
         e.preventDefault();
         e.stopPropagation();
         this.showContextMenu(e, node);
@@ -426,6 +443,7 @@ class FileManager {
    * @returns {string} 语言标识
    */
   getLanguageFromExtension(ext) {
+    
     const map = {
       'js': 'javascript',
       'jsx': 'javascript',
@@ -450,7 +468,10 @@ class FileManager {
       'yaml': 'yaml',
       'yml': 'yaml'
     };
-    return map[ext] || 'plaintext';
+    
+    const result = map[ext] || 'plaintext';
+    
+    return result;
   }
 
   /**
@@ -459,7 +480,6 @@ class FileManager {
    * @param {Object} node - 文件节点
    */
   showContextMenu(event, node) {
-    console.log('📋 显示右键菜单，节点类型:', node.type, '路径:', node.path);
     
     // 移除之前的菜单
     const existingMenu = document.getElementById('file-context-menu');
@@ -564,7 +584,6 @@ class FileManager {
         menuItem.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          console.log('✅ 点击菜单项:', item.label);
           item.action();
           menu.remove();
         });
@@ -573,10 +592,7 @@ class FileManager {
       }
     });
 
-    console.log('✅ 菜单已创建，共 ' + menuItems.length + ' 项');
-    console.log('📍 菜单位置: x=' + event.pageX + ', y=' + event.pageY);
     document.body.appendChild(menu);
-    console.log('✅ 菜单已添加到 DOM');
 
     // 点击其他地方关闭菜单
     const closeMenu = (e) => {
@@ -620,19 +636,16 @@ class FileManager {
           setTimeout(() => {
             window.aiChat.inputElement.value = message;
             window.aiChat.inputElement.focus();
-            console.log('✅ 文件已添加到新 Claude 聊天窗口');
           }, 100);
         } else {
           // 添加到现有聊天
           window.aiChat.inputElement.value = message;
           window.aiChat.inputElement.focus();
-          console.log('✅ 文件已添加到 Claude 聊天窗口');
         }
       } else {
         alert('Claude Chat Component not found. Make sure AI Chat is initialized.');
       }
     } catch (error) {
-      console.error('❌ 添加文件到聊天失败:', error);
       alert('Failed to add file to chat: ' + error.message);
     }
   }
@@ -643,10 +656,8 @@ class FileManager {
    */
   copyPath(filePath) {
     navigator.clipboard.writeText(filePath).then(() => {
-      console.log('✅ 路径已复制到剪贴板');
       this.showNotification('Path copied to clipboard');
     }).catch(err => {
-      console.error('❌ 复制失败:', err);
     });
   }
 
@@ -657,10 +668,8 @@ class FileManager {
   copyRelativePath(filePath) {
     const relativePath = './' + filePath;
     navigator.clipboard.writeText(relativePath).then(() => {
-      console.log('✅ 相对路径已复制到剪贴板');
       this.showNotification('Relative path copied to clipboard');
     }).catch(err => {
-      console.error('❌ 复制失败:', err);
     });
   }
 
@@ -671,7 +680,6 @@ class FileManager {
   revealInFinder(filePath) {
     if (window.electronAPI && window.electronAPI.revealInFinder) {
       window.electronAPI.revealInFinder(filePath);
-      console.log('✅ 在 Finder 中打开');
     } else {
       console.warn('⚠️ revealInFinder API not available');
     }

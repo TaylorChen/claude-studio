@@ -26,18 +26,15 @@ class SearchComponent {
         // 合并选项
         this.searchOptions = { ...this.searchOptions, ...options };
 
-        console.log('🔍 开始项目搜索，查询词:', query, '选项:', this.searchOptions);
 
         // 方式1: 尝试使用 Electron API (优先)
         let useElectronAPI = false;
         if (window.electronAPI && window.electronAPI.searchInFiles) {
             try {
-                console.log('📡 使用 Electron API 搜索...');
                 const result = await window.electronAPI.searchInFiles(query, this.searchOptions);
                 if (result && result.success && result.results && result.results.length > 0) {
                     this.searchResults = result.results;
                     this.currentResultIndex = 0;
-                    console.log('✅ Electron API 搜索成功:', this.searchResults.length, '个结果');
                     useElectronAPI = true;
                     return this.searchResults;
                 } else if (result && result.success) {
@@ -54,10 +51,8 @@ class SearchComponent {
         }
 
         // 方式2: 使用本地搜索 (作为主要搜索方式或回退)
-        console.log('🔍 开始本地文件搜索...');
         this.searchResults = this.searchInLocalFiles(query, options);
         this.currentResultIndex = 0;
-        console.log('📁 本地搜索结果:', this.searchResults.length, '个匹配');
         
         return this.searchResults;
     }
@@ -77,8 +72,6 @@ class SearchComponent {
         const flags = options.caseSensitive ? 'g' : 'gi';
         const searchPattern = new RegExp(escapedQuery, flags);
 
-        console.log('🔍 本地搜索: 查询词:', query, '使用模式:', searchPattern);
-        console.log('🔍 本地搜索: 扫描项目文件', projectFiles.length, '个');
 
         // 第一阶段：精确文件名匹配 (优先级最高)
         const exactMatches = [];
@@ -93,7 +86,6 @@ class SearchComponent {
                     isFileName: true,
                     matchType: 'exact'
                 });
-                console.log('✅ 精确匹配文件名:', file.name);
             }
         });
 
@@ -112,7 +104,6 @@ class SearchComponent {
                     isFileName: true,
                     matchType: 'filename'
                 });
-                console.log('✅ 文件名包含匹配:', file.name);
             }
         });
 
@@ -133,7 +124,6 @@ class SearchComponent {
                     isFileName: true,
                     matchType: 'path'
                 });
-                console.log('✅ 路径包含匹配:', file.path);
             }
         });
 
@@ -141,12 +131,6 @@ class SearchComponent {
         results.push(...exactMatches);
         results.push(...partialMatches);
         results.push(...pathMatches);
-
-        console.log('📁 本地搜索完成:',
-            '精确匹配', exactMatches.length, '个,',
-            '文件名匹配', partialMatches.length, '个,',
-            '路径匹配', pathMatches.length, '个'
-        );
 
         return results;
     }
@@ -188,7 +172,6 @@ class SearchComponent {
         const allFiles = [...baseFiles, ...editorFiles, ...mvpFiles];
         const uniqueFiles = this.deduplicateFiles(allFiles);
         
-        console.log('📁 项目文件清单: 基础', baseFiles.length, '个 + 编辑器', editorFiles.length, '个 + MVP', mvpFiles.length, '个 = 总计', uniqueFiles.length, '个');
         
         return uniqueFiles;
     }

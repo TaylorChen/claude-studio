@@ -14,12 +14,10 @@ let pty = null;
 try {
   // 优先使用预编译版本
   pty = require('@homebridge/node-pty-prebuilt-multiarch');
-  console.log('✅ 使用预编译的 node-pty');
 } catch (e1) {
   try {
     // 回退到标准版本
     pty = require('node-pty');
-    console.log('✅ 使用标准的 node-pty');
   } catch (e2) {
     console.warn('⚠️ node-pty 不可用，终端功能将被禁用');
   }
@@ -40,12 +38,13 @@ const workspaceStateFile = path.join(app.getPath('userData'), 'workspace-state.j
 let mainWindow = null;
 let projectDir = process.cwd();
 const terminals = new Map();  // terminalId -> ptyProcess
+const windowProjects = new Map();  // windowId -> projectDir
 
 /**
  * 创建主窗口
  */
-function createWindow() {
-  mainWindow = new BrowserWindow({
+function createWindow(projectPath = null) {
+  const window = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1000,
@@ -62,21 +61,49 @@ function createWindow() {
     backgroundColor: '#1e1e1e'
   });
 
+  // 存储窗口的项目路径
+  const windowId = window.id;
+  const actualProjectPath = projectPath || process.cwd();
+  windowProjects.set(windowId, actualProjectPath);
+
+  // 设置窗口标题（根据项目路径）
+  const windowTitle = projectPath 
+    ? `Claude Studio - ${path.basename(projectPath)}`
+    : 'Claude Studio';
+  window.setTitle(windowTitle);
+
   // 加载主界面
   const htmlPath = path.join(__dirname, '..', 'index.html');
-  mainWindow.loadFile(htmlPath);
+  window.loadFile(htmlPath);
+
+  // 如果提供了项目路径，传递给渲染进程
+  if (projectPath) {
+    window.webContents.once('did-finish-load', () => {
+      window.webContents.send('open-project-from-menu', { projectPath });
+    });
+  } else {
+    // 这是第一个窗口，设置为 mainWindow
+    mainWindow = window;
+  }
 
   // 开发模式
   if (process.argv.includes('--dev')) {
-    mainWindow.webContents.openDevTools();
+    window.webContents.openDevTools();
   }
 
-  // 创建菜单
-  createMenu();
+  // 创建菜单（仅在第一个窗口）
+  if (!mainWindow) {
+    createMenu();
+  }
 
   // 窗口事件
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  window.on('closed', () => {
+    if (window === mainWindow) {
+      mainWindow = null;
+    }
+    // 删除该窗口的项目路径记录
+    windowProjects.delete(windowId);
+    
     // 清理所有终端
     terminals.forEach((ptyProcess) => {
       ptyProcess.kill();
@@ -84,6 +111,7 @@ function createWindow() {
     terminals.clear();
   });
 
+  return window;
 }
 
 /**
@@ -114,18 +142,33 @@ function createMenu() {
         {
           label: 'Open Project',
           accelerator: 'CmdOrCtrl+O',
-          click: () => mainWindow.webContents.send('menu:open-project')
+          click: () => {
+            if (mainWindow && mainWindow.webContents) {
+              mainWindow.webContents.send('menu:open-project');
+            } else {
+            }
+          }
         },
         {
           label: 'Open File',
           accelerator: 'CmdOrCtrl+Shift+O',
-          click: () => mainWindow.webContents.send('menu:open-file')
+          click: () => {
+            if (mainWindow && mainWindow.webContents) {
+              mainWindow.webContents.send('menu:open-file');
+            } else {
+            }
+          }
         },
         { type: 'separator' },
         {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
-          click: () => mainWindow.webContents.send('menu:save')
+          click: () => {
+            if (mainWindow && mainWindow.webContents) {
+              mainWindow.webContents.send('menu:save');
+            } else {
+            }
+          }
         },
         ...(!isMac ? [
           { type: 'separator' },
@@ -658,7 +701,12 @@ ipcMain.handle('history:export', async (event, id, filePath) => {
   try {
     if (!filePath) {
       // 显示保存对话框
-      const result = await dialog.showSaveDialog(mainWindow, {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      if (!senderWindow) {
+        return { success: false, error: '窗口不可用' };
+      }
+      
+      const result = await dialog.showSaveDialog(senderWindow, {
         title: '导出对话',
         defaultPath: `conversation-${id}.json`,
         filters: [
@@ -690,9 +738,14 @@ ipcMain.handle('history:export', async (event, id, filePath) => {
 });
 
 // 导出所有对话
-ipcMain.handle('history:exportAll', async () => {
+ipcMain.handle('history:exportAll', async (event) => {
   try {
-    const result = await dialog.showSaveDialog(mainWindow, {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!senderWindow) {
+      return { success: false, error: '窗口不可用' };
+    }
+    
+    const result = await dialog.showSaveDialog(senderWindow, {
       title: '导出所有对话',
       defaultPath: 'all-conversations.json',
       filters: [
@@ -713,9 +766,14 @@ ipcMain.handle('history:exportAll', async () => {
 });
 
 // 导入对话
-ipcMain.handle('history:import', async () => {
+ipcMain.handle('history:import', async (event) => {
   try {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!senderWindow) {
+      return { success: false, error: '窗口不可用' };
+    }
+    
+    const result = await dialog.showOpenDialog(senderWindow, {
       title: '导入对话',
       filters: [
         { name: 'JSON', extensions: ['json'] }
@@ -762,10 +820,30 @@ ipcMain.handle('history:getStats', () => {
 // 保存工作区状态
 ipcMain.handle('workspace:saveState', async (event, state) => {
   try {
-    await fs.promises.writeFile(workspaceStateFile, JSON.stringify(state, null, 2), 'utf-8');
+    // 验证状态对象
+    if (!state || typeof state !== 'object') {
+      console.warn('⚠️ 工作区状态无效，跳过保存');
+      return { success: true };
+    }
+    
+    // 先写入临时文件，然后重命名（原子操作）
+    const tempFile = workspaceStateFile + '.tmp';
+    const jsonContent = JSON.stringify(state, null, 2);
+    
+    await fs.promises.writeFile(tempFile, jsonContent, 'utf-8');
+    
+    // 原子性重命名
+    if (fs.existsSync(workspaceStateFile)) {
+      await fs.promises.unlink(workspaceStateFile);
+    }
+    await fs.promises.rename(tempFile, workspaceStateFile);
+    
     return { success: true };
   } catch (error) {
-    console.error('❌ 保存工作区状态失败:', error);
+    // 清理临时文件
+    try {
+      await fs.promises.unlink(workspaceStateFile + '.tmp').catch(() => {});
+    } catch (e) {}
     return { success: false, error: error.message };
   }
 });
@@ -778,10 +856,23 @@ ipcMain.handle('workspace:loadState', async () => {
     }
     
     const content = await fs.promises.readFile(workspaceStateFile, 'utf-8');
-    const state = JSON.parse(content);
-    return { success: true, state };
+    
+    // 检查内容是否为空或无效
+    if (!content || !content.trim()) {
+      console.warn('⚠️ 工作区状态文件为空，创建默认状态');
+      return { success: true, state: null };
+    }
+    
+    try {
+      const state = JSON.parse(content);
+      return { success: true, state };
+    } catch (parseError) {
+      console.warn('⚠️ 工作区状态文件无效，将重置:', parseError.message);
+      // 删除损坏的文件
+      await fs.promises.unlink(workspaceStateFile).catch(() => {});
+      return { success: true, state: null };
+    }
   } catch (error) {
-    console.error('❌ 加载工作区状态失败:', error);
     return { success: false, error: error.message, state: null };
   }
 });
@@ -794,17 +885,30 @@ ipcMain.handle('workspace:clearState', async () => {
     }
     return { success: true };
   } catch (error) {
-    console.error('❌ 清除工作区状态失败:', error);
     return { success: false, error: error.message };
   }
 });
 
 // ==================== 文件系统操作 ====================
 
-ipcMain.handle('get-project-dir', () => projectDir);
+/**
+ * 获取特定窗口的项目路径
+ */
+function getWindowProjectPath(event) {
+  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const windowId = senderWindow?.id;
+  const windowProjectPath = windowProjects.get(windowId) || projectDir;
+  return windowProjectPath;
+}
 
-ipcMain.handle('list-files', async () => {
+ipcMain.handle('get-project-dir', (event) => {
+  const windowProjectPath = getWindowProjectPath(event);
+  return windowProjectPath;
+});
+
+ipcMain.handle('list-files', async (event) => {
   try {
+    const projectPath = getWindowProjectPath(event);
     const files = [];
     
     function scanDirectory(dir, relativePath = '') {
@@ -836,18 +940,18 @@ ipcMain.handle('list-files', async () => {
       }
     }
     
-    scanDirectory(projectDir);
+    scanDirectory(projectPath);
     
     return { success: true, files };
   } catch (error) {
-    console.error('❌ 文件扫描失败:', error);
     return { success: false, error: error.message };
   }
 });
 
 ipcMain.handle('read-file', async (event, filePath) => {
   try {
-    const fullPath = path.join(projectDir, filePath);
+    const projectPath = getWindowProjectPath(event);
+    const fullPath = path.join(projectPath, filePath);
     const content = fs.readFileSync(fullPath, 'utf8');
     return { success: true, content };
   } catch (error) {
@@ -857,7 +961,8 @@ ipcMain.handle('read-file', async (event, filePath) => {
 
 ipcMain.handle('write-file', async (event, filePath, content) => {
   try {
-    const fullPath = path.join(projectDir, filePath);
+    const projectPath = getWindowProjectPath(event);
+    const fullPath = path.join(projectPath, filePath);
     fs.writeFileSync(fullPath, content, 'utf8');
     return { success: true };
   } catch (error) {
@@ -867,7 +972,8 @@ ipcMain.handle('write-file', async (event, filePath, content) => {
 
 ipcMain.handle('create-file', async (event, filePath, content = '') => {
   try {
-    const fullPath = path.join(projectDir, filePath);
+    const projectPath = getWindowProjectPath(event);
+    const fullPath = path.join(projectPath, filePath);
     const dir = path.dirname(fullPath);
     
     // 确保目录存在
@@ -884,7 +990,8 @@ ipcMain.handle('create-file', async (event, filePath, content = '') => {
 
 ipcMain.handle('delete-file', async (event, filePath) => {
   try {
-    const fullPath = path.join(projectDir, filePath);
+    const projectPath = getWindowProjectPath(event);
+    const fullPath = path.join(projectPath, filePath);
     const stats = fs.statSync(fullPath);
     
     if (stats.isDirectory()) {
@@ -901,8 +1008,9 @@ ipcMain.handle('delete-file', async (event, filePath) => {
 
 ipcMain.handle('rename-file', async (event, oldPath, newPath) => {
   try {
-    const fullOldPath = path.join(projectDir, oldPath);
-    const fullNewPath = path.join(projectDir, newPath);
+    const projectPath = getWindowProjectPath(event);
+    const fullOldPath = path.join(projectPath, oldPath);
+    const fullNewPath = path.join(projectPath, newPath);
     fs.renameSync(fullOldPath, fullNewPath);
     return { success: true };
   } catch (error) {
@@ -912,7 +1020,8 @@ ipcMain.handle('rename-file', async (event, oldPath, newPath) => {
 
 ipcMain.handle('create-directory', async (event, dirPath) => {
   try {
-    const fullPath = path.join(projectDir, dirPath);
+    const projectPath = getWindowProjectPath(event);
+    const fullPath = path.join(projectPath, dirPath);
     fs.mkdirSync(fullPath, { recursive: true });
     return { success: true };
   } catch (error) {
@@ -920,17 +1029,32 @@ ipcMain.handle('create-directory', async (event, dirPath) => {
   }
 });
 
-ipcMain.handle('open-project-dialog', async () => {
+ipcMain.handle('open-project-dialog', async (event) => {
   try {
-    const result = await dialog.showOpenDialog(mainWindow, {
+    
+    // 获取发起请求的窗口
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    
+    if (!senderWindow) {
+      return { success: false, error: '窗口不可用' };
+    }
+    
+    const result = await dialog.showOpenDialog(senderWindow, {
       properties: ['openDirectory'],
       title: '选择项目文件夹'
     });
 
+
     if (!result.canceled && result.filePaths.length > 0) {
-      projectDir = result.filePaths[0];
-      return { success: true, projectPath: projectDir };
+      const selectedPath = result.filePaths[0];
+      projectDir = selectedPath;
+      
+      // 创建新窗口打开该项目
+      const newWindow = createWindow(selectedPath);
+      
+      return { success: true, projectPath: selectedPath, newWindow: true };
     }
+    console.log('⚠️ [main] 用户取消了对话框');
     return { success: false, error: '用户取消操作' };
   } catch (error) {
     return { success: false, error: error.message };
@@ -939,6 +1063,11 @@ ipcMain.handle('open-project-dialog', async () => {
 
 ipcMain.handle('select-attachment-files', async (event, filterType = 'all') => {
   try {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!senderWindow) {
+      return { success: false, error: '窗口不可用' };
+    }
+    
     let filters = [];
     
     if (filterType === 'image' || filterType === 'all') {
@@ -957,7 +1086,7 @@ ipcMain.handle('select-attachment-files', async (event, filterType = 'all') => {
       filters.push({ name: '所有文件', extensions: ['*'] });
     }
     
-    const result = await dialog.showOpenDialog(mainWindow, {
+    const result = await dialog.showOpenDialog(senderWindow, {
       title: '选择要附加的文件',
       properties: ['openFile', 'multiSelections'],
       filters: filters
@@ -1050,35 +1179,39 @@ ipcMain.handle('create-terminal', async (event, terminalId, options) => {
       };
     }
     
+    const projectPath = getWindowProjectPath(event);
+    
     const shell = os.platform() === 'win32' ? 'powershell.exe' : (os.platform() === 'darwin' ? '/bin/zsh' : '/bin/bash');
     
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-256color',
       cols: options.cols || 80,
       rows: options.rows || 24,
-      cwd: projectDir || process.env.HOME || process.cwd(),
+      cwd: projectPath || process.env.HOME || process.cwd(),
       env: process.env
     });
+    
 
     terminals.set(terminalId, ptyProcess);
 
+    // 获取发起请求的窗口
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+    
     ptyProcess.onData((data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(`terminal-data-${terminalId}`, data);
+      if (senderWindow && !senderWindow.isDestroyed()) {
+        senderWindow.webContents.send(`terminal-data-${terminalId}`, data);
       }
     });
 
     ptyProcess.onExit(() => {
       terminals.delete(terminalId);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send(`terminal-exit-${terminalId}`);
+      if (senderWindow && !senderWindow.isDestroyed()) {
+        senderWindow.webContents.send(`terminal-exit-${terminalId}`);
       }
     });
 
-    console.log('✅ 终端创建成功:', terminalId);
     return { success: true };
   } catch (error) {
-    console.error('❌ 创建终端失败:', error);
     return { success: false, error: error.message };
   }
 });
@@ -1158,7 +1291,8 @@ async function executeGitCommand(args) {
 
 ipcMain.handle('reveal-in-finder', async (event, filePath) => {
   try {
-    const fullPath = path.join(projectDir, filePath);
+    const projectPath = getWindowProjectPath(event);
+    const fullPath = path.join(projectPath, filePath);
     
     // 检查文件是否存在
     if (!fs.existsSync(fullPath)) {
@@ -1236,7 +1370,6 @@ app.whenReady().then(async () => {
   try {
     await chatHistoryManager.init();
   } catch (error) {
-    console.error('❌ 对话历史初始化失败:', error);
   }
   
   createWindow();
@@ -1255,7 +1388,6 @@ app.whenReady().then(async () => {
       console.warn('⚠️ 全局快捷键 Cmd+Shift+L 注册失败（可能被占用）');
     }
   } catch (error) {
-    console.error('❌ 全局快捷键注册失败:', error);
   }
 });
 

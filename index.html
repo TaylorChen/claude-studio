@@ -189,6 +189,7 @@
         <div id="checkpoint-panel" class="checkpoint-panel" style="display: none; position: fixed; right: 20px; top: 60px; bottom: 60px; width: 400px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden;">
             <!-- 检查点面板内容由 CheckpointPanelComponent 渲染 -->
         </div>
+
     </div>
 
     <!-- 状态栏 -->
@@ -215,60 +216,122 @@
     <!-- xterm CSS -->
     <link rel="stylesheet" href="node_modules/xterm/css/xterm.css">
     
+    <!-- 在 Monaco 之前加载 xterm - 直接加载，不需要 AMD -->
+    <script src="node_modules/xterm/lib/xterm.js"></script>
+    <script src="node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+    <script>
+        console.log('✅ [xterm预加载] xterm 已加载');
+        console.log('   Terminal:', typeof Terminal);
+        console.log('   FitAddon:', typeof FitAddon);
+        
+        // 如果 FitAddon 不是 constructor，尝试从不同的导出中获取
+        if (typeof FitAddon !== 'function') {
+            console.warn('⚠️ FitAddon 不是 function，尝试其他导出...');
+            if (window.FitAddon && window.FitAddon.FitAddon) {
+                window.FitAddon = window.FitAddon.FitAddon;
+                console.log('✅ 从 FitAddon.FitAddon 获取，类型:', typeof FitAddon);
+            }
+        }
+        
+        // 全局诊断函数 - 检查 Monaco 语言状态
+        window.checkMonacoLanguages = function() {
+            if (!window.monaco) {
+                console.error('❌ window.monaco 不存在');
+                return;
+            }
+            const langs = window.monaco.languages.getLanguages();
+            console.log(`📋 Monaco 已注册 ${langs.length} 个语言:`);
+            console.log(langs.map(l => l.id).join(', '));
+            
+            // 检查关键语言
+            ['php', 'python', 'go', 'html', 'javascript'].forEach(lang => {
+                const exists = langs.some(l => l.id === lang);
+                console.log(`   ${exists ? '✅' : '❌'} ${lang}`);
+            });
+        };
+    </script>
+    
     <!-- Monaco Editor 加载器 -->
     <script>
+        console.log('🔧 [index.html] 第1步：初始化 Monaco 配置');
         var require = { paths: { vs: 'node_modules/monaco-editor/min/vs' } };
     </script>
     <script src="node_modules/monaco-editor/min/vs/loader.js"></script>
     
+    <!-- 预加载 Monaco 语言模块 - 必须在 xterm.js 修改 define 之前完成 -->
+    <script>
+        console.log('🔧 [index.html] 第2步：开始加载 Monaco 编辑器和语言模块');
+        
+        // 为了追踪 Monaco 加载状态，创建一个全局标志
+        window._monacoLoadingPromise = new Promise(function(resolve) {
+            // 保存原始的 require，防止被污染
+            var monacoRequire = window.require;
+            
+            console.log('✅ [index.html] 已保存 require');
+            
+            // 配置路径
+            monacoRequire.config({ paths: { vs: 'node_modules/monaco-editor/min/vs' } });
+            console.log('🔧 [index.html] require.config 已设置');
+            
+            // 立即加载编辑器主模块（这会注册 editor.api 虚拟模块）
+            console.log('🔧 [index.html] 第3步：开始加载编辑器主模块...');
+            monacoRequire(['vs/editor/editor.main'], function() {
+                console.log('✅ [index.html] 编辑器主模块已加载，现在加载语言模块...');
+                
+                // 现在 editor.api 虚拟模块已注册，可以安全加载语言模块
+                monacoRequire([
+                    'vs/basic-languages/php/php',
+                    'vs/basic-languages/python/python',
+                    'vs/basic-languages/go/go',
+                    'vs/basic-languages/html/html'
+                ], function() {
+                    console.log('✅ [index.html] 第4步：所有语言定义已加载！');
+                    
+                    // 显示已注册的语言
+                    try {
+                        if (window.monaco && window.monaco.languages) {
+                            var langs = window.monaco.languages.getLanguages();
+                            var langIds = langs.map(l => l.id);
+                            console.log(`📋 [index.html] 已注册语言 (${langs.length} 个): ${langIds.join(', ')}`);
+                            
+                            // 检查关键语言
+                            ['php', 'python', 'go', 'html', 'javascript'].forEach(lang => {
+                                var found = langIds.includes(lang);
+                                console.log(`   ${found ? '✅' : '❌'} ${lang}`);
+                            });
+                        } else {
+                            console.error('❌ [index.html] window.monaco 或 languages 不可用');
+                        }
+                    } catch (e) {
+                        console.error('❌ [index.html] 检查语言时出错:', e);
+                    }
+                    
+                    // 标记加载完成
+                    resolve(true);
+                }, function(err) {
+                    console.error('❌ [index.html] 加载语言模块失败:', err);
+                    resolve(false);
+                });
+            }, function(err) {
+                console.error('❌ [index.html] 加载编辑器主模块失败:', err);
+                resolve(false);
+            });
+        });
+    </script>
+    
     <!-- 先加载 Markdown 库 -->
     <script src="src/utils/initMarkdownLibraries.js"></script>
     
-    <!-- 加载 xterm.js（解决 AMD 冲突） -->
+    <!-- 加载所有应用组件 -->
     <script>
-        (function() {
-            var savedRequire = window.require;
-            var savedDefine = window.define;
+        // 等待 DOM 和基础库加载完成
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('📋 [组件加载] 开始加载所有组件...');
             
-            // 拦截 AMD define 调用并转换为全局变量
-            window.define = function() {
-                var factory = arguments[arguments.length - 1];
-                if (typeof factory === 'function') {
-                    try {
-                        var module = factory();
-                        if (module && module.Terminal) {
-                            window.Terminal = module.Terminal;
-                        } else if (module && module.FitAddon) {
-                            window.FitAddon = module.FitAddon;
-                        }
-                    } catch (e) {
-                        console.error('模块加载失败:', e);
-                    }
-                }
-            };
-            window.define.amd = true;
+            var componentsLoaded = 0;
+            var componentsNeeded = 20;
             
-            // 加载 xterm 脚本
-            Promise.all([
-                fetch('node_modules/xterm/lib/xterm.js').then(r => r.text()),
-                fetch('node_modules/xterm-addon-fit/lib/xterm-addon-fit.js').then(r => r.text())
-            ]).then(function(scripts) {
-                try {
-                    eval(scripts[0]);
-                    eval(scripts[1]);
-                } catch (e) {
-                    console.error('xterm 加载失败:', e);
-                }
-                
-                // 恢复 AMD 环境
-                window.require = savedRequire;
-                window.define = savedDefine;
-                
-                // 加载所有组件脚本
-                var componentsLoaded = 0;
-                var componentsNeeded = 18;  // +2 for MessageBuilder 和 AttachmentProcessor (Phase 3)
-                
-                function checkAndLoadApp() {
+            function checkAndLoadApp() {
                   componentsLoaded++;
                   console.log('✓ 组件加载中... (' + componentsLoaded + '/' + componentsNeeded + ')');
                   
@@ -385,6 +448,7 @@
 
                 loadComponentWithErrorHandling('src/components/PromptTemplateDialog.js', 'PromptTemplateDialog');
 
+
                 // Phase 3: 加载命令系统脚本
                 loadComponentWithErrorHandling('src/modules/ai/CommandParser.js', 'CommandParser');
                 loadComponentWithErrorHandling('src/modules/ai/CommandRegistry.js', 'CommandRegistry');
@@ -413,10 +477,7 @@
                     checkAndLoadApp();
                 };
                 document.body.appendChild(searchScript);
-            }).catch(function(err) {
-                console.error('加载失败:', err);
-            });
-        })();
+        });
     </script>
 </body>
 </html>

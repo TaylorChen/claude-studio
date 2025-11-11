@@ -53,7 +53,6 @@ class AIChatComponent {
                 console.log(`✓ 从 localStorage 同步加载了 ${Object.keys(this.sessions).length} 个会话`);
             }
         } catch (error) {
-            console.error('❌ 同步加载会话失败:', error);
         }
     }
 
@@ -93,7 +92,6 @@ class AIChatComponent {
                 }
             }
         } catch (error) {
-            console.error('❌ 异步加载会话失败:', error);
         }
     }
 
@@ -113,7 +111,6 @@ class AIChatComponent {
             if (window.indexedDBManager && window.indexedDBManager.isSupported && window.indexedDBManager.db) {
                 const indexedDBSuccess = await window.indexedDBManager.saveSessions(data);
                 if (indexedDBSuccess) {
-                    console.log('💾 会话已保存到 IndexedDB');
                     // 同时保留 localStorage 备份
             localStorage.setItem('claude_ai_sessions', JSON.stringify(data));
                     return;
@@ -122,9 +119,7 @@ class AIChatComponent {
 
             // 降级到 localStorage
             localStorage.setItem('claude_ai_sessions', JSON.stringify(data));
-            console.log('💾 会话已保存到 localStorage');
         } catch (error) {
-            console.error('❌ 保存会话失败:', error);
         }
     }
 
@@ -171,7 +166,6 @@ class AIChatComponent {
             console.log('✓ 命令系统初始化完成');
             console.log(`✓ 已注册 ${this.commandRegistry.getAll().length} 个命令`);
         } catch (error) {
-            console.error('❌ 命令系统初始化失败:', error);
         }
     }
 
@@ -198,7 +192,6 @@ class AIChatComponent {
         if (current) {
             current.messages = this.messages;
             current.updatedAt = Date.now();
-            console.log(`💾 已保存会话 "${current.title}" 的 ${current.messages.length} 条消息`);
         }
 
         const sessionId = this.generateSessionId();
@@ -246,18 +239,15 @@ class AIChatComponent {
      */
     switchSession(sessionId) {
         if (!this.sessions[sessionId]) {
-            console.error('❌ 会话不存在:', sessionId);
             return;
         }
 
-        console.log('🔄 切换会话:', sessionId);
 
         // 保存当前会话的消息
         const current = this.getCurrentSession();
         if (current) {
             current.messages = this.messages;
             current.updatedAt = Date.now();
-            console.log(`💾 已保存会话 "${current.title}" 的 ${current.messages.length} 条消息`);
         }
 
         // 切换到新会话
@@ -273,7 +263,6 @@ class AIChatComponent {
             }
         }
         
-        console.log(`📂 切换到会话 "${newSession.title}"，共 ${this.messages.length} 条消息`);
         
         this.saveSessions().catch(e => console.error('❌ 保存会话切换出错:', e));
         
@@ -299,7 +288,6 @@ class AIChatComponent {
         }
 
         const title = this.sessions[sessionId]?.title || '对话';
-        console.log('🗑️ 删除会话:', sessionId, title);
         
         // 删除会话
         delete this.sessions[sessionId];
@@ -309,7 +297,6 @@ class AIChatComponent {
         if (this.currentSessionId === sessionId) {
             this.currentSessionId = this.sessionOrder[this.sessionOrder.length - 1];
             this.messages = this.sessions[this.currentSessionId].messages || [];
-            console.log(`📂 自动切换到会话: ${this.sessions[this.currentSessionId].title}`);
         }
         
         this.saveSessions().catch(e => console.error('❌ 保存会话删除出错:', e));
@@ -557,9 +544,6 @@ class AIChatComponent {
                 }
             }
 
-            console.log('🔧 开始初始化 AI 聊天组件...');
-            console.log('📊 当前会话 ID:', this.currentSessionId);
-            console.log('📝 已加载会话数:', Object.keys(this.sessions).length);
 
             this.renderChatUI();
             this.renderSessionTabs();
@@ -570,13 +554,10 @@ class AIChatComponent {
             setTimeout(() => {
             // 加载当前会话的消息
             const current = this.getCurrentSession();
-                console.log('📂 当前会话数据:', current);
                 
                 const messagesContainer = document.getElementById('chatMessages');
-                console.log('📍 查找消息容器 #chatMessages:', messagesContainer ? '✓ 找到' : '❌ 未找到');
                 
                 if (!messagesContainer) {
-                    console.error('❌ 无法找到消息容器，DOM 可能未完全加载');
                     return;
                 }
                 
@@ -589,7 +570,6 @@ class AIChatComponent {
                     
                     // 逐个显示消息
                     this.messages.forEach(msg => {
-                        console.log('📤 添加消息:', msg.role);
                         this.addMessageToDOM(msg.role, msg.content);
                     });
                     console.log('✓ 消息已显示');
@@ -601,7 +581,6 @@ class AIChatComponent {
             }, 200);
             
         } catch (error) {
-            console.error('❌ AI聊天组件初始化失败:', error);
         }
     }
 
@@ -702,7 +681,6 @@ class AIChatComponent {
     renderChatUI() {
         const container = document.getElementById(this.containerId);
         if (!container) {
-            console.error('❌ 容器不存在:', this.containerId);
             return;
         }
 
@@ -712,7 +690,6 @@ class AIChatComponent {
             return;
         }
 
-        console.log('🔨 创建聊天 UI 结构...');
         container.innerHTML = `
             <div class="ai-chat-container" style="
                 display: flex;
@@ -1036,7 +1013,6 @@ class AIChatComponent {
             return;
         }
 
-        console.log(`📎 处理 ${files.length} 个拖拽文件`);
         let successCount = 0;
 
         for (let file of files) {
@@ -1049,14 +1025,11 @@ class AIChatComponent {
                 const attachment = await window.attachmentManager.addAttachment(file, filePath);
                 if (attachment) {
                     successCount++;
-                    console.log(`✅ 文件已添加: ${file.name}`);
                 }
             } catch (error) {
-                console.error(`❌ 添加文件失败: ${file.name}`, error);
             }
         }
 
-        console.log(`📎 成功添加 ${successCount}/${files.length} 个文件`);
         this.updateAttachmentsList();
     }
 
@@ -1065,15 +1038,12 @@ class AIChatComponent {
      */
     async addAttachmentFromFile() {
         if (!window.attachmentManager) {
-            console.error('❌ AttachmentManager 未初始化');
             return;
         }
 
-        console.log('📂 打开文件选择对话框...');
         const attachments = await window.attachmentManager.addAttachmentFromDialog('all');
         
         if (attachments.length > 0) {
-            console.log(`✅ 添加了 ${attachments.length} 个附件`);
             this.updateAttachmentsList();
             this.showNotification(`✅ 已添加 ${attachments.length} 个文件`);
         }
@@ -1084,15 +1054,12 @@ class AIChatComponent {
      */
     async addAttachmentFromImage() {
         if (!window.attachmentManager) {
-            console.error('❌ AttachmentManager 未初始化');
             return;
         }
 
-        console.log('🖼️ 打开图片选择对话框...');
         const attachments = await window.attachmentManager.addAttachmentFromDialog('image');
         
         if (attachments.length > 0) {
-            console.log(`✅ 添加了 ${attachments.length} 个图片`);
             this.updateAttachmentsList();
             this.showNotification(`✅ 已添加 ${attachments.length} 个图片`);
         }
@@ -1171,7 +1138,6 @@ class AIChatComponent {
         const attachment = window.attachmentManager.getAttachmentInfo(attachmentId);
         if (attachment) {
             window.attachmentManager.removeAttachment(attachmentId);
-            console.log(`✅ 已删除附件: ${attachment.name}`);
             this.updateAttachmentsList();
         }
     }
@@ -1502,11 +1468,9 @@ class AIChatComponent {
     refreshMessagesDisplay() {
         const messagesContainer = document.getElementById('chatMessages');
         if (!messagesContainer) {
-            console.error('❌ 消息容器未找到');
             return;
         }
 
-        console.log('🔄 刷新消息显示，共', this.messages.length, '条消息');
         
         // 清空容器
         messagesContainer.innerHTML = '';
@@ -1514,7 +1478,6 @@ class AIChatComponent {
         // 重新添加所有消息
         if (this.messages.length > 0) {
             this.messages.forEach((msg, index) => {
-                console.log(`📤 添加消息 ${index + 1}/${this.messages.length}: ${msg.role}`);
                 this.addMessageToDOM(msg.role, msg.content);
             });
         } else {
@@ -1594,7 +1557,6 @@ class AIChatComponent {
             const parsed = this.commandParser.parse(message);
             
             if (parsed.isCommand) {
-                console.log('🔍 检测到斜杠命令:', parsed.command, parsed.args);
                 
                 // 添加用户消息到聊天框
                 this.addMessage('user', message);
@@ -1615,7 +1577,6 @@ class AIChatComponent {
                     this.addMessage('system', result.message);
                     
                 } catch (error) {
-                    console.error('❌ 命令执行失败:', error);
                     this.addMessage('system', `❌ 命令执行出错: ${error.message}`);
                 } finally {
                     this.isProcessing = false;
@@ -1648,7 +1609,6 @@ class AIChatComponent {
             let finalMessage = message;
 
             if (attachments.length > 0) {
-                console.log(`📎 检测到 ${attachments.length} 个附件，开始处理...`);
                 
                 // 处理附件
                 if (typeof AttachmentProcessor !== 'undefined') {
@@ -1686,23 +1646,11 @@ class AIChatComponent {
                     // 将附件信息添加到消息中（作为文本）
                     // Claude CLI 会识别文件路径并自动处理
                     finalMessage = `${message}${attachmentInfo}`;
-                    
-                    console.log('📝 消息已增强，包含附件路径');
-                    console.log('📎 附件列表:', processedAttachments.map(a => {
-                        const accessiblePath = window.attachmentManager?.getAccessiblePath?.(a.path) || a.path;
-                        return `${a.name} (${a.type}) @ ${accessiblePath}`;
-                    }).join(', '));
                 }
             }
 
             // 发送到Claude API (必须是字符串)
             if (window.electronAPI && window.electronAPI.claude && window.electronAPI.claude.sendMessage) {
-                console.log('📤 发送消息到 Claude API...', { 
-                    hasAttachments: attachments.length > 0,
-                    attachmentCount: attachments.length,
-                    messageLength: finalMessage.length
-                });
-                
                 const result = await window.electronAPI.claude.sendMessage(finalMessage);
                 
                 if (result && result.success) {
@@ -1711,13 +1659,11 @@ class AIChatComponent {
                     
                     // 清除附件
                     if (attachments.length > 0) {
-                        console.log('🗑️ 清除已发送的附件...');
                         window.attachmentManager.clearAttachments();
                         this.updateAttachmentsList();
                         console.log('✓ 附件已清除');
                     }
                 } else if (result && result.error) {
-                    console.error('❌ AI 返回错误:', result.error);
                     this.addMessage('assistant', `❌ 抱歉，出现错误：${result.error}`);
                 } else {
                     console.log('✓ 收到 AI 回复');
@@ -1725,7 +1671,6 @@ class AIChatComponent {
                     
                     // 清除附件
                     if (attachments.length > 0) {
-                        console.log('🗑️ 清除已发送的附件...');
                         window.attachmentManager.clearAttachments();
                         this.updateAttachmentsList();
                         console.log('✓ 附件已清除');
@@ -1737,7 +1682,6 @@ class AIChatComponent {
                 this.addMessage('assistant', '❌ AI服务暂时不可用，请检查Claude CLI是否正确配置。');
             }
         } catch (error) {
-            console.error('❌ 发送消息失败:', error);
             this.addMessage('assistant', `❌ 发送失败：${error.message}`);
         } finally {
             // 恢复发送按钮
@@ -1771,7 +1715,6 @@ class AIChatComponent {
                 this.showNotification('⚠️ 没有历史对话');
             }
         } catch (error) {
-            console.error('❌ 恢复对话失败:', error);
             this.showNotification('❌ 恢复失败');
         }
     }
@@ -1807,11 +1750,9 @@ class AIChatComponent {
     renderCurrentSessionsList() {
         const container = document.getElementById('session-list-content');
         if (!container) {
-            console.error('❌ 会话列表容器未找到');
             return;
         }
 
-        console.log('📋 渲染会话列表，共', Object.keys(this.sessions).length, '个会话');
 
         let html = `
             <div style="padding: 10px; height: 100%; display: flex; flex-direction: column;">
@@ -2131,7 +2072,6 @@ class AIChatComponent {
      */
     updateHistorySearchResults() {
         if (!this.commandExecutor) {
-            console.warn('❌ CommandExecutor 未初始化');
             return;
         }
 

@@ -18,7 +18,6 @@ class AttachmentManager {
         this.projectRoot = '/Users/ahyk/python/claude-studio';
         
         console.log('✓ AttachmentManager 已初始化');
-        console.log(`📂 项目根目录: ${this.projectRoot}`);
     }
 
     /**
@@ -29,12 +28,10 @@ class AttachmentManager {
      */
     async addAttachment(file, filePath = null) {
         try {
-            console.log('📎 开始添加附件:', file.name);
 
             // 验证文件
             const validation = this.validateFile(file);
             if (!validation.valid) {
-                console.error('❌ 文件验证失败:', validation.error);
                 alert(`❌ 文件验证失败: ${validation.error}`);
                 return null;
             }
@@ -52,7 +49,6 @@ class AttachmentManager {
                 addedAt: Date.now()
             };
 
-            console.log(`📝 附件路径: ${attachment.path}`);
 
             // 生成预览 (如果是图片)
             if (attachment.type === 'image') {
@@ -61,11 +57,9 @@ class AttachmentManager {
 
             // 添加到列表
             this.attachments.push(attachment);
-            console.log(`✅ 附件添加成功 (${this.attachments.length} 个)`);
 
             return attachment;
         } catch (error) {
-            console.error('❌ 添加附件失败:', error);
             return null;
         }
     }
@@ -79,7 +73,6 @@ class AttachmentManager {
         const index = this.attachments.findIndex(att => att.id === attachmentId);
         if (index !== -1) {
             const removed = this.attachments.splice(index, 1)[0];
-            console.log(`✅ 附件已删除: ${removed.name}`);
             return true;
         }
         console.warn(`⚠️ 未找到附件: ${attachmentId}`);
@@ -143,11 +136,9 @@ class AttachmentManager {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => {
-                console.log(`✅ 图片预览已生成: ${file.name}`);
                 resolve(e.target.result);  // Base64 字符串
             };
             reader.onerror = (error) => {
-                console.error('❌ 生成预览失败:', error);
                 resolve(null);  // 返回 null，继续处理
             };
             reader.readAsDataURL(file);
@@ -186,19 +177,16 @@ class AttachmentManager {
         try {
             // 使用 Electron API 打开文件对话框
             if (!window.electronAPI || !window.electronAPI.selectAttachmentFiles) {
-                console.error('❌ Electron API 不可用');
                 alert('❌ 文件对话框功能不可用');
                 return [];
             }
 
-            console.log('📂 打开文件对话框...');
             const result = await window.electronAPI.selectAttachmentFiles(filterType);
 
             if (!result.success) {
                 if (result.canceled) {
                     console.log('⚠️ 用户取消了文件选择');
                 } else {
-                    console.error('❌ 文件对话框错误:', result.error);
                     alert(`❌ 文件对话框错误: ${result.error}`);
                 }
                 return [];
@@ -226,10 +214,8 @@ class AttachmentManager {
                 }
             }
 
-            console.log(`✅ 成功添加 ${addedAttachments.length} 个附件`);
             return addedAttachments;
         } catch (error) {
-            console.error('❌ 添加附件失败:', error);
             alert(`❌ 添加附件失败: ${error.message}`);
             return [];
         }
@@ -330,11 +316,9 @@ class AttachmentManager {
     getAccessiblePath(filePath) {
         if (!filePath) return '';
         
-        console.log(`🔍 检查路径访问性: ${filePath}`);
         
         // 如果已经可访问，直接返回
         if (this.isPathAccessible(filePath)) {
-            console.log(`✅ 路径可访问: ${filePath}`);
             return filePath;
         }
         
@@ -367,7 +351,6 @@ class AttachmentManager {
     clearAttachments() {
         const count = this.attachments.length;
         this.attachments = [];
-        console.log(`✅ 已清空 ${count} 个附件`);
     }
 
     /**

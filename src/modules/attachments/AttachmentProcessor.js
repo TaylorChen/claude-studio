@@ -24,13 +24,11 @@ class AttachmentProcessor {
    * @returns {Promise<Object>} 处理后的附件信息
    */
   async processAttachment(attachment) {
-    console.log(`📎 处理附件: ${attachment.name}`);
 
     try {
       // 验证文件
       const validation = this.validateAttachment(attachment);
       if (!validation.valid) {
-        console.error('❌ 附件验证失败:', validation.error);
         return { success: false, error: validation.error };
       }
 
@@ -49,7 +47,6 @@ class AttachmentProcessor {
       console.log('✓ 附件处理完成:', metadata);
       return { success: true, data: metadata };
     } catch (error) {
-      console.error('❌ 处理附件出错:', error);
       return { success: false, error: error.message };
     }
   }
@@ -60,7 +57,6 @@ class AttachmentProcessor {
    * @returns {Promise<Object>} {successful: [], failed: []}
    */
   async processMultiple(attachments) {
-    console.log(`📎 批量处理 ${attachments.length} 个附件`);
 
     const results = {
       successful: [],

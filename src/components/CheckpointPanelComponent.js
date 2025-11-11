@@ -694,7 +694,6 @@ class CheckpointPanelComponent {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('❌ 下载失败:', error);
       this.showNotification('❌ 下载失败', 'error');
     }
   }

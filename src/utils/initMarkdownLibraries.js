@@ -4,32 +4,38 @@
  */
 
 (function() {
-    console.log('📚 初始化 Markdown 库...');
 
     // 动态加载 markdown-it 脚本
     function loadMarkdownIt() {
         return new Promise((resolve) => {
+            // 临时禁用 AMD，避免与 Monaco 冲突
+            const savedDefine = window.define;
+            const savedRequire = window.require;
+            delete window.define;
+            delete window.require;
+            
             const script = document.createElement('script');
             script.src = 'node_modules/markdown-it/dist/markdown-it.min.js';
             script.onload = function() {
-                console.log('✓ markdown-it 脚本已加载，检查库是否可用');
-                // 给库一点时间来初始化（最多 500ms）
-                let checkCount = 0;
-                const checkInterval = setInterval(() => {
-                    checkCount++;
-                    if (window.markdownit) {
-                        console.log('✓ window.markdownit 已可用');
-                        clearInterval(checkInterval);
-                        resolve(true);
-                    } else if (checkCount > 10) {
-                        console.warn('⚠️ markdown-it 脚本加载成功但 window.markdownit 暂不可用，将使用降级模式');
-                        clearInterval(checkInterval);
-                        resolve(false);
-                    }
-                }, 50);
+                console.log('✓ markdown-it 脚本已加载');
+                
+                // 恢复 AMD
+                window.define = savedDefine;
+                window.require = savedRequire;
+                
+                // 检查库是否可用
+                if (window.markdownit) {
+                    console.log('✓ window.markdownit 已可用');
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ markdown-it 脚本加载成功但 window.markdownit 不可用，将使用降级模式');
+                    resolve(false);
+                }
             };
             script.onerror = function() {
-                console.error('❌ markdown-it 加载失败');
+                // 恢复 AMD
+                window.define = savedDefine;
+                window.require = savedRequire;
                 resolve(false);
             };
             document.body.appendChild(script);
@@ -47,7 +53,6 @@
                 resolve(true);
             };
             link.onerror = function() {
-                console.error('❌ highlight.js 样式加载失败');
                 resolve(false);
             };
             document.head.appendChild(link);
@@ -117,7 +122,6 @@
                 hljs: hlResult
             });
         } catch (e) {
-            console.error('❌ Markdown 库初始化失败:', e);
             window.markdownLibrariesReady = false;
         }
     }

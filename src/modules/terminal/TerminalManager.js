@@ -13,6 +13,18 @@ class TerminalManager {
   }
 
   /**
+   * 初始化终端管理器
+   * @param {HTMLElement} container - 容器元素
+   * @returns {Promise<string>} 初始终端 ID
+   */
+  async init(container) {
+    if (!container) {
+      return null;
+    }
+    return await this.create(container);
+  }
+
+  /**
    * 创建新终端
    * @param {HTMLElement} container - 容器元素
    * @returns {string} 终端 ID
@@ -24,8 +36,11 @@ class TerminalManager {
     // 创建 xterm 实例
     const xterm = new Terminal({
       cursorBlink: true,
+      cursorStyle: 'block',
       fontSize: 14,
       fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", "Courier New", monospace',
+      lineHeight: 1.2,
+      letterSpacing: 0,
       theme: {
         background: '#1e1e1e',
         foreground: '#cccccc',
@@ -47,8 +62,14 @@ class TerminalManager {
         brightCyan: '#29b8db',
         brightWhite: '#e5e5e5'
       },
-      scrollback: 10000,
-      rendererType: 'canvas'
+      scrollback: 50000,  // 增加滚动缓冲区，支持更多历史
+      rendererType: 'canvas',
+      mouseEvents: true,  // 启用鼠标事件
+      rightClickSelectsWord: true,  // 右键选择单词
+      screenReaderMode: false,
+      allowProposedApi: true,
+      enableBold: true,
+      enableStdin: true
     });
 
     // 添加自适应插件

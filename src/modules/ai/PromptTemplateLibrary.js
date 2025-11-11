@@ -390,7 +390,6 @@ class PromptTemplateLibrary {
         localStorage.setItem('claude_favorite_templates', JSON.stringify(this.favorites));
       }
     } catch (error) {
-      console.error('❌ 保存收藏失败:', error);
     }
   }
 
@@ -405,7 +404,6 @@ class PromptTemplateLibrary {
         this.favorites = JSON.parse(data);
       }
     } catch (error) {
-      console.error('❌ 加载收藏失败:', error);
     }
   }
 
@@ -418,7 +416,6 @@ class PromptTemplateLibrary {
         localStorage.setItem('claude_template_downloads', JSON.stringify(this.downloads));
       }
     } catch (error) {
-      console.error('❌ 保存下载统计失败:', error);
     }
   }
 

@@ -25,7 +25,6 @@ class CommandExecutor {
   async execute(command, args = []) {
     const commandName = command.toLowerCase();
 
-    console.log(`🔍 执行命令: ${commandName}`, args);
 
     // 检查命令是否存在
     if (!this.registry.hasCommand(commandName)) {
@@ -63,7 +62,6 @@ class CommandExecutor {
       return result;
 
     } catch (error) {
-      console.error(`❌ 命令执行失败: ${commandName}`, error);
       return {
         success: false,
         message: `❌ 命令执行出错: ${error.message}`

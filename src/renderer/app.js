@@ -160,7 +160,6 @@
         require(['vs/editor/editor.main'], () => {
           resolve();
         }, (error) => {
-          console.error('❌ Monaco Editor 加载失败:', error);
           reject(error);
         });
       });
@@ -497,11 +496,9 @@
       }
       
       if (typeof Terminal === 'undefined') {
-        console.error('❌ xterm 库加载超时');
         return false;
       }
       
-      console.log('✅ xterm 库已就绪');
 
       // 创建默认终端
       await this.createTerminal();
@@ -513,7 +510,6 @@
       const container = document.getElementById('terminal-container');
       
       if (!container) {
-        console.error('❌ 终端容器不存在');
         return null;
       }
 
@@ -582,7 +578,6 @@
       });
 
       if (!result.success) {
-        console.error('❌ 创建终端失败:', result.error);
         xterm.writeln('\x1b[1;31m终端创建失败: ' + result.error + '\x1b[0m');
         return null;
       }
@@ -601,7 +596,6 @@
         window.electronAPI.writeToTerminal(terminalId, data);
       });
 
-      console.log('✅ 终端创建成功:', terminalId);
       return terminalId;
     }
 
@@ -825,7 +819,6 @@
 
         // 右键菜单事件
         item.addEventListener('contextmenu', (e) => {
-          console.log('🖱️ 右键点击文件树项目:', node.name);
           e.preventDefault();
           e.stopPropagation();
           this.showContextMenu(e, node);
@@ -861,9 +854,10 @@
         'ts': 'typescript', 'tsx': 'typescript',
         'html': 'html', 'css': 'css',
         'json': 'json', 'md': 'markdown',
-        'py': 'python', 'go': 'go'
+        'py': 'python', 'go': 'go',
+        'php': 'php', 'php3': 'php', 'php4': 'php', 'php5': 'php', 'phtml': 'php'
       };
-      return map[ext] || 'plaintext';
+      return map[ext?.toLowerCase()] || 'plaintext';
     }
 
     refreshTree() {
@@ -877,7 +871,6 @@
      * 显示右键菜单
      */
     showContextMenu(event, node) {
-      console.log('📋 显示右键菜单，节点类型:', node.type, '路径:', node.path);
       
       // 移除之前的菜单
       const existingMenu = document.getElementById('file-context-menu');
@@ -1001,7 +994,6 @@
           menuItem.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('✅ 点击菜单项:', item.label);
             item.action();
             menu.remove();
           });
@@ -1010,10 +1002,7 @@
         }
       });
 
-      console.log('✅ 菜单已创建，共 ' + menuItems.length + ' 项');
-      console.log('📍 菜单位置: x=' + event.pageX + ', y=' + event.pageY);
       document.body.appendChild(menu);
-      console.log('✅ 菜单已添加到 DOM');
 
       // 点击其他地方关闭菜单
       const closeMenu = (e) => {
@@ -1033,7 +1022,6 @@
      */
     async addToClaudeChat(node, isNew) {
       try {
-        console.log('📂 开始添加文件到 Claude 聊天, isNew=' + isNew);
         
         // 确保 AI 聊天组件已初始化
         if (!window.aiChat) {
@@ -1051,7 +1039,6 @@
 
         // 再次检查
         if (!window.aiChat) {
-          console.error('❌ Claude Chat Component not found. Make sure AI Chat is initialized.');
           alert('Claude Chat Component not found. Please open the AI Chat panel first (Cmd+Shift+L).');
           return;
         }
@@ -1080,20 +1067,16 @@
             if (window.aiChat && window.aiChat.inputElement) {
               window.aiChat.inputElement.value = message;
               window.aiChat.inputElement.focus();
-              console.log('✅ 文件已添加到新 Claude 聊天窗口');
             }
           }, 100);
         } else {
           // 添加到现有聊天
-          console.log('💬 添加到现有会话');
           if (window.aiChat && window.aiChat.inputElement) {
             window.aiChat.inputElement.value = message;
             window.aiChat.inputElement.focus();
-            console.log('✅ 文件已添加到 Claude 聊天窗口');
           }
         }
       } catch (error) {
-        console.error('❌ 添加文件到聊天失败:', error);
         alert('Failed to add file to chat: ' + error.message);
       }
     }
@@ -1103,7 +1086,6 @@
      */
     async addFileAsAttachment(node, isImage = false) {
       try {
-        console.log('📎 开始添加文件作为附件...');
         
         // 确保 AI 聊天组件已初始化
         if (!window.aiChat) {
@@ -1121,7 +1103,6 @@
 
         // 确保附件管理器已初始化
         if (!window.attachmentManager) {
-          console.error('❌ AttachmentManager not found');
           alert('Attachment manager not initialized');
           return;
         }
@@ -1136,12 +1117,10 @@
         };
 
         // 添加附件
-        console.log('📎 添加附件到管理器:', fileName);
         const attachment = await window.attachmentManager.addAttachment(fakeFile, node.path);
         
         if (attachment) {
           window.aiChat.updateAttachmentsList();
-          console.log('✅ 附件已添加:', fileName);
           
           // 打开 AI Chat 如果还没有打开
           const aiPanel = document.querySelector('.ai-chat-container');
@@ -1151,12 +1130,10 @@
             }
           }
           
-          console.log('✅ 文件已添加为附件');
         } else {
           alert('Failed to add file as attachment');
         }
       } catch (error) {
-        console.error('❌ 添加附件失败:', error);
         alert('Failed to add attachment: ' + error.message);
       }
     }
@@ -1166,7 +1143,6 @@
      */
     async addFileAsAttachmentNew(node, isImage = false) {
       try {
-        console.log('📎✨ 开始添加文件作为附件到新会话...');
         
         // 确保 AI 聊天组件已初始化
         if (!window.aiChat) {
@@ -1199,17 +1175,14 @@
             path: node.path
           };
 
-          console.log('📎 添加附件到新会话:', fileName);
           const attachment = await window.attachmentManager.addAttachment(fakeFile, node.path);
           
           if (attachment) {
             window.aiChat.updateAttachmentsList();
-            console.log('✅ 附件已添加到新会话:', fileName);
           }
         }
 
       } catch (error) {
-        console.error('❌ 添加附件到新会话失败:', error);
         alert('Failed to add attachment: ' + error.message);
       }
     }
@@ -1226,9 +1199,7 @@
      */
     copyPath(filePath) {
       navigator.clipboard.writeText(filePath).then(() => {
-        console.log('✅ 路径已复制到剪贴板');
       }).catch(err => {
-        console.error('❌ 复制失败:', err);
       });
     }
 
@@ -1238,9 +1209,7 @@
     copyRelativePath(filePath) {
       const relativePath = './' + filePath;
       navigator.clipboard.writeText(relativePath).then(() => {
-        console.log('✅ 相对路径已复制到剪贴板');
       }).catch(err => {
-        console.error('❌ 复制失败:', err);
       });
     }
 
@@ -1250,7 +1219,6 @@
     revealInFinder(filePath) {
       if (window.electronAPI && window.electronAPI.revealInFinder) {
         window.electronAPI.revealInFinder(filePath);
-        console.log('✅ 在 Finder 中打开');
       } else {
         console.warn('⚠️ revealInFinder API not available');
       }
@@ -1285,17 +1253,7 @@
       const aiResizer = document.getElementById('ai-resizer');
       const aiPanel = document.querySelector('.ai-panel');
       if (aiResizer && aiPanel) {
-        console.log('✅ AI 面板 Resizer 初始化成功', {
-          resizer: aiResizer.id,
-          panel: aiPanel.className,
-          initialWidth: aiPanel.getBoundingClientRect().width
-        });
         this.setupResizer(aiResizer, aiPanel, 'width');
-      } else {
-        console.error('❌ AI 面板 Resizer 初始化失败', {
-          hasResizer: !!aiResizer,
-          hasPanel: !!aiPanel
-        });
       }
 
       // 初始化终端高度调整器
@@ -1308,11 +1266,6 @@
 
     setupResizer(resizer, targetElement, dimension = 'width', options = {}) {
       resizer.addEventListener('mousedown', (e) => {
-        console.log('🖱️ Resizer mousedown 事件触发', {
-          resizerId: resizer.id,
-          targetClass: targetElement.className,
-          dimension: dimension
-        });
         this.startResize(e, resizer, targetElement, dimension, options);
       });
     }
@@ -1334,15 +1287,6 @@
         const defaultMax = parseInt(computed.maxWidth) || 800;
         this.minSize = options.min ?? defaultMin;
         this.maxSize = options.max ?? defaultMax;
-        
-        console.log('🎯 开始宽度调整', {
-          element: targetElement.className.split(' ')[0],
-          startX: this.startX,
-          startWidth: this.startWidth,
-          minSize: this.minSize,
-          maxSize: this.maxSize,
-          cssVariable: targetElement.classList.contains('ai-panel') ? '--ai-panel-width' : '--sidebar-width'
-        });
       } else {
         this.startY = e.clientY;
         const rect = targetElement.getBoundingClientRect();
@@ -1374,17 +1318,6 @@
           
           // 每 50 次移动输出一次日志，避免日志过多
           if (!this._logCounter) this._logCounter = 0;
-          if (this._logCounter % 50 === 0) {
-            console.log('📏 AI 面板宽度调整中', {
-              currentX: e.clientX,
-              startX: this.startX,
-              deltaX: deltaX,
-              direction: deltaX < 0 ? '← 向左(变大)' : '→ 向右(变小)',
-              startWidth: this.startWidth,
-              calculatedWidth: calculatedWidth,
-              beforeClamp: newWidth
-            });
-          }
           this._logCounter++;
         } else {
           newWidth = this.startWidth + deltaX;
@@ -1428,17 +1361,6 @@
           const cssVarValue = getComputedStyle(document.documentElement).getPropertyValue('--ai-panel-width');
           const actualWidth = this.targetElement.getBoundingClientRect().width;
           const computedWidth = getComputedStyle(this.targetElement).width;
-          
-          if (this._logCounter % 50 === 0) {
-            console.log('🔍 CSS 变量验证', {
-              setCSSVar: `${newWidth}px`,
-              getCSSVar: cssVarValue.trim(),
-              actualWidth: actualWidth,
-              computedWidth: computedWidth,
-              inlineStyle: this.targetElement.style.flexBasis,
-              match: actualWidth === newWidth
-            });
-          }
         }
       } else if (this.dimension === 'height') {
         const deltaY = e.clientY - this.startY;
@@ -1456,31 +1378,6 @@
       const finalWidth = wasAIPanel ? this.targetElement.getBoundingClientRect().width : null;
       
       if (wasAIPanel) {
-        const cssVarValue = getComputedStyle(document.documentElement).getPropertyValue('--ai-panel-width');
-        const computedWidth = getComputedStyle(this.targetElement).width;
-        const computedFlexBasis = getComputedStyle(this.targetElement).flexBasis;
-        const inlineWidth = this.targetElement.style.width;
-        const inlineFlexBasis = this.targetElement.style.flexBasis;
-        
-        console.log('✅ AI 面板宽度调整完成', {
-          finalWidth: finalWidth,
-          totalMoves: this._logCounter || 0,
-          cssVariable: cssVarValue.trim(),
-          computedWidth: computedWidth,
-          computedFlexBasis: computedFlexBasis,
-          inlineWidth: inlineWidth,
-          inlineFlexBasis: inlineFlexBasis,
-          match: Math.abs(finalWidth - parseFloat(computedWidth)) < 1
-        });
-        
-        // 额外验证：检查元素的实际渲染尺寸
-        console.log('🔬 深度验证', {
-          getBoundingClientRect: this.targetElement.getBoundingClientRect(),
-          offsetWidth: this.targetElement.offsetWidth,
-          clientWidth: this.targetElement.clientWidth,
-          scrollWidth: this.targetElement.scrollWidth
-        });
-        
         this._logCounter = 0;
       }
       
@@ -1617,11 +1514,9 @@
         if (result.success) {
           return true;
         } else {
-          console.error('❌ 保存失败:', result.error);
           return false;
         }
       } catch (error) {
-        console.error('❌ 保存工作区状态失败:', error);
         return false;
       }
     }
@@ -1630,7 +1525,6 @@
       try {
         const result = await window.electronAPI.workspace.loadState();
         if (!result.success) {
-          console.error('❌ 加载失败:', result.error);
           return null;
         }
         
@@ -1640,7 +1534,6 @@
         
         return result.state;
       } catch (error) {
-        console.error('❌ 恢复工作区状态失败:', error);
         return null;
       }
     }
@@ -1697,7 +1590,6 @@
           await this.applyEditorState(state.editor, app);
         }
       } catch (error) {
-        console.error('❌ 应用工作区状态失败:', error);
       }
     }
 
@@ -1717,20 +1609,27 @@
     async applyEditorState(editorState, app) {
       if (!app || !editorState.openTabs) return;
       
+      
       for (const tab of editorState.openTabs) {
         try {
+          console.log(`  - 尝试恢复: ${tab.path}`);
+          
           // 读取文件内容
           const fileResult = await window.electronAPI.readFile(tab.path);
           
           if (!fileResult || !fileResult.success) {
-            console.error(`❌ 文件读取失败: ${tab.title}`, fileResult);
+            // 文件不存在是正常的（可能是不同的项目）
+            console.warn(`  ⚠️ 文件不存在于当前项目，跳过: ${tab.title}`);
             continue;
           }
           
-          // 打开文件到编辑器
-          await app.editor.openFile(tab.path, fileResult.content);
+          console.log(`  ✓ 恢复成功: ${tab.title}`);
+          
+          // 打开文件到编辑器（注意：需要传递正确的 language）
+          const language = app.detectLanguage(tab.path);
+          await app.editor.openFile(tab.path, fileResult.content, language);
         } catch (error) {
-          console.error(`⚠️  无法恢复标签: ${tab.title}`, error);
+          console.warn(`  ⚠️ 无法恢复标签: ${tab.title}`, error.message);
         }
       }
       
@@ -1763,11 +1662,9 @@
         if (result.success) {
           return true;
         } else {
-          console.error('❌ 清除失败:', result.error);
           return false;
         }
       } catch (error) {
-        console.error('❌ 清除工作区状态失败:', error);
         return false;
       }
     }
@@ -1804,9 +1701,12 @@
         }
 
         // 初始化模块
+        // 为每个窗口生成唯一ID
+        this.windowId = `app-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         this.editor = new EditorManager();
         this.ai = new AIService();
-        this.files = new FileManager();
+        this.files = new FileManager(this.windowId);  // 传递窗口ID给 FileManager
         this.terminal = new TerminalManager();
         this.resizer = new ResizerManager();
         this.contextManager = new ContextManager(this.editor);
@@ -1837,7 +1737,20 @@
 
         // 初始化面包屑路径容器（在这里初始化，而不是在 EditorManager）
         this.breadcrumbContainer = document.getElementById('breadcrumb-bar');
-        console.log('✅ 初始化面包屑容器:', this.breadcrumbContainer);
+
+        // 初始化编辑器状态（清空任何之前的文件）
+        store.setState('editor.activeFile', null);
+        store.setState('editor.openFiles', []);
+        
+        // 初始化 AI 会话状态（清空任何之前的会话）
+        store.setState('ai.conversations', []);
+        store.setState('ai.isProcessing', false);
+        store.setState('ai.currentSuggestion', null);
+        store.setState('ai.inlineEditMode', false);
+
+        // 获取当前窗口的项目路径
+        const projectDirResult = await window.electronAPI.getProjectDir();
+        this.files.projectPath = projectDirResult;
 
         // 初始化文件树
         const fileTreeContainer = document.getElementById('file-tree');
@@ -1864,6 +1777,9 @@
         this.bindKeyboardShortcuts();
         this.subscribeToStore();
         
+        // 设置菜单事件监听器（在init中直接设置，确保一定会执行）
+        this.setupMenuEventListeners();
+        
         // 监听全局快捷键事件（来自主进程）
         if (window.electronAPI && window.electronAPI.onToggleAIPanel) {
           window.electronAPI.onToggleAIPanel(() => {
@@ -1884,14 +1800,26 @@
         this.workspaceState = new WorkspaceState();
         this.workspaceState.init();
         
-        // 恢复上次的工作区状态
+        // 恢复上次的工作区状态（仅在当前是主窗口时）
+        // 新窗口打开不同项目时，不应恢复之前窗口的编辑器状态
         const savedState = await this.workspaceState.loadState();
         if (savedState) {
-          console.log('📂 发现保存的工作区状态，正在恢复...');
-          // 延迟恢复，确保 DOM 已准备好
-          setTimeout(async () => {
-            await this.workspaceState.applyState(savedState, this);
-          }, 500);
+          // 检查 savedState 中保存的项目路径是否与当前项目匹配
+          const currentProjectPath = this.files.projectPath;
+          const savedProjectPath = savedState.projectPath;
+          
+          console.log(`  - 保存的项目: ${savedProjectPath}`);
+          console.log(`  - 当前项目: ${currentProjectPath}`);
+          
+          // 只有在项目相同或当前项目为空时才恢复
+          if (currentProjectPath === null || currentProjectPath === savedProjectPath) {
+            // 延迟恢复，确保 DOM 已准备好
+            setTimeout(async () => {
+              await this.workspaceState.applyState(savedState, this);
+            }, 500);
+          } else {
+            console.log('⚠️ 项目不匹配，跳过恢复工作区状态');
+          }
         }
 
         // 将应用实例挂载到全局，供 WorkspaceState 访问
@@ -1900,7 +1828,6 @@
         this.initialized = true;
         this.showWelcome();
       } catch (error) {
-        console.error('❌ 初始化失败:', error);
         alert('应用初始化失败: ' + error.message);
       }
     }
@@ -1910,18 +1837,17 @@
       window.addEventListener('file:open', (e) => {
         const { path, content, language, line = 1, column = 1 } = e.detail;
         
+        
         // 打开文件在编辑器中
         this.editor.openFile(path, content, language);
         
         // 设置光标位置（如果指定了行列号）
         if (line && column && this.editor.editor) {
           try {
-            console.log('🎯 设置光标位置:', { line, column });
             // 使用 setTimeout 确保编辑器内容已加载
             setTimeout(() => {
               this.editor.editor.revealLineInCenter(line);
               this.editor.editor.setPosition({ lineNumber: line, column: column });
-              console.log('✅ 光标位置设置成功');
             }, 100);
           } catch (posError) {
             console.warn('⚠️ 设置光标位置失败:', posError.message);
@@ -1933,8 +1859,6 @@
         store.setState('editor.activeFile', path);
         
         // 更新面包屑路径
-        console.log('📍 调用 updateBreadcrumb，路径:', path);
-        console.log('📍 breadcrumbContainer:', this.breadcrumbContainer);
         this.updateBreadcrumb(path);
         
         // 显示打开成功提示
@@ -2215,22 +2139,18 @@
           // 方式1: 使用 getValue() 方法 (Monaco Editor)
           if (typeof this.editor.getValue === 'function') {
             currentContent = this.editor.getValue();
-            console.log('✅ 使用 getValue() 获取编辑器内容');
           }
           // 方式2: 直接访问 currentContent 属性 (备选)
           else if (this.editor.currentContent) {
             currentContent = this.editor.currentContent;
-            console.log('✅ 使用 currentContent 属性获取编辑器内容');
           }
           // 方式3: 使用 getContent() 方法 (备选)
           else if (typeof this.editor.getContent === 'function') {
             currentContent = this.editor.getContent();
-            console.log('✅ 使用 getContent() 获取编辑器内容');
           }
           // 方式4: 尝试从 MonacoEditor 对象获取编辑器实例
           else if (this.editor.editor && typeof this.editor.editor.getValue === 'function') {
             currentContent = this.editor.editor.getValue();
-            console.log('✅ 从编辑器实例获取内容');
           }
         }
 
@@ -2243,32 +2163,18 @@
           });
         }
 
-        // 调试日志
-        console.log('🔍 搜索调试信息:', {
-          activeFile,
-          hasEditor: !!this.editor,
-          hasContent: !!currentContent,
-          contentLength: currentContent?.length || 0,
-          query,
-          searchOptions: options
-        });
-
         // 🔑 关键改变：现在总是使用项目搜索作为主要方式
         // 项目搜索会首先尝试在本地文件中查找匹配项
-        console.log('📁 开始项目搜索...');
         
         try {
           await window.searchComponent.searchInProject(query, options);
-          console.log('📁 项目搜索结果:', window.searchComponent.searchResults.length, '个匹配');
         } catch (projError) {
-          console.warn('❌ 项目搜索失败:', projError);
           window.searchComponent.searchResults = [];
         }
         
         window.searchComponent.currentResultIndex = 0;
         this.renderSearchResults();
       } catch (error) {
-        console.error('❌ 搜索失败:', error);
         document.getElementById('searchResults').innerHTML = 
           `<div class="no-results">搜索失败: ${error.message}</div>`;
       }
@@ -2351,7 +2257,6 @@
       const line = result.line || 1;
       const column = result.column || 1;
 
-      console.log('🔍 打开搜索结果文件:', filePath, `(行: ${line}, 列: ${column})`);
 
       try {
         // 处理文件路径
@@ -2360,7 +2265,6 @@
           fullPath = filePath.substring(2); // 移除 './'
         }
 
-        console.log('📂 文件路径:', fullPath);
 
         // 检查是否有 Electron API
         if (!window.electronAPI || !window.electronAPI.readFile) {
@@ -2370,12 +2274,10 @@
         }
 
         // 使用 IPC 通信读取文件
-        console.log('📡 通过 IPC 读取文件...');
         
         let ipcResult;
         try {
           ipcResult = await window.electronAPI.readFile(fullPath);
-          console.log('✅ IPC 调用成功');
         } catch (ipcError) {
           console.warn('⚠️ IPC 调用失败:', ipcError.message);
           console.warn('⚠️ 切换到备选方案...');
@@ -2407,16 +2309,13 @@
         // 确保内容是字符串
         const contentStr = typeof content === 'string' ? content : String(content);
         
-        console.log('✅ 文件内容读取成功，长度:', contentStr.length, '字节');
 
         // 获取文件扩展名并检测语言
         const ext = fullPath.split('.').pop();
         const language = this.getLanguageFromExtension(ext);
 
-        console.log('📝 检测到语言:', language);
 
         // 使用统一的文件打开逻辑（与资源列表一致）
-        console.log('📤 触发统一的文件打开事件...');
         window.dispatchEvent(new CustomEvent('file:open', {
           detail: { 
             path: fullPath, 
@@ -2427,9 +2326,7 @@
           }
         }));
 
-        console.log('✅ 文件打开事件已触发');
       } catch (error) {
-        console.error('❌ 打开文件失败:', error.message);
         console.error('错误堆栈:', error.stack);
         alert(`打开文件失败: ${error.message}`);
       }
@@ -2460,6 +2357,11 @@
         'yml': 'yaml',
         'yaml': 'yaml',
         'xml': 'xml',
+        'php': 'php',
+        'php3': 'php',
+        'php4': 'php',
+        'php5': 'php',
+        'phtml': 'php',
         'txt': 'text'
       };
       
@@ -2476,7 +2378,6 @@
       const line = result.line || 1;
       const column = result.column || 1;
 
-      console.log('🔄 使用备选方案打开文件...');
 
       try {
         // 尝试使用 Node.js require（可能在某些配置下可用）
@@ -2490,7 +2391,6 @@
           fullPath = path.join(process.cwd(), filePath);
         }
 
-        console.log('📂 完整文件路径:', fullPath);
 
         // 检查文件是否存在
         if (!fs.existsSync(fullPath)) {
@@ -2503,7 +2403,6 @@
         const content = fs.readFileSync(fullPath, 'utf-8');
         const language = this.detectLanguage(fullPath);
 
-        console.log('✅ 文件内容读取成功，长度:', content.length, '字节');
 
         // 打开文件在编辑器中
         if (this.editor) {
@@ -2515,10 +2414,8 @@
           }
 
           store.setState('editor.activeFile', fullPath);
-          console.log('✅ 文件已在编辑器中打开');
         }
       } catch (fallbackError) {
-        console.error('❌ 备选方案也失败了:', fallbackError.message);
         alert(`无法打开文件: ${result.file}\n\n原因: ${fallbackError.message}`);
       }
     }
@@ -2532,7 +2429,6 @@
         return;
       }
 
-      console.log('🍞 开始更新面包屑，路径:', filePath);
 
       // 清空现有面包屑
       this.breadcrumbContainer.innerHTML = '';
@@ -2543,17 +2439,14 @@
         normalizedPath = normalizedPath.substring(2);
       }
 
-      console.log('🍞 规范化后的路径:', normalizedPath);
 
       // 分割路径
       const parts = normalizedPath.split('/').filter(p => p.length > 0);
 
-      console.log('🍞 路径分割结果:', parts);
 
       // 如果没有路径，显示文件名
       if (parts.length === 0) {
         this.breadcrumbContainer.innerHTML = '<span class="breadcrumb-item current">文件</span>';
-        console.log('✅ 面包屑已更新 (单个文件)');
         return;
       }
 
@@ -2574,7 +2467,6 @@
         if (!isLast) {
           item.style.cursor = 'pointer';
           item.addEventListener('click', async () => {
-            console.log('🔍 点击面包屑导航:', itemPath);
             // 如果点击的是文件夹，可以在文件树中展开（预留扩展）
             // 或者显示该文件夹的内容
           });
@@ -2591,7 +2483,6 @@
         }
       });
 
-      console.log('✅ 面包屑已更新:', parts.join(' › '));
 
       // 如果路径过长，添加滚动提示
       if (parts.length > 5) {
@@ -2603,6 +2494,7 @@
      * 根据文件扩展名检测语言
      */
     detectLanguage(filePath) {
+      
       const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
       
       const languageMap = {
@@ -2624,10 +2516,132 @@
         '.yml': 'yaml',
         '.sh': 'shell',
         '.bash': 'shell',
+        '.go': 'go',
+        '.php': 'php',
+        '.php3': 'php',
+        '.php4': 'php',
+        '.php5': 'php',
+        '.phtml': 'php',
         '.txt': 'plaintext'
       };
 
-      return languageMap[ext] || 'plaintext';
+      const language = languageMap[ext] || 'plaintext';
+      return language;
+    }
+
+    /**
+     * 设置菜单事件监听器
+     */
+    setupMenuEventListeners() {
+      
+      if (!window.electronAPI) {
+        return;
+      }
+      
+      if (!window.electronAPI.listenToMenuEvent) {
+        return;
+      }
+      
+      
+      // 监听 Open Project - 打开新窗口
+      window.electronAPI.listenToMenuEvent('menu:open-project', async () => {
+        try {
+          // 直接调用 IPC，显示文件夹选择对话框
+          const result = await window.electronAPI.openProjectDialog();
+          
+          if (result.success && result.projectPath) {
+            // 新窗口会在主进程创建，这个窗口保持不变
+            if (result.newWindow) {
+              toast.show('新窗口已打开: ' + result.projectPath.split('/').pop(), 'success', 2000);
+            } else {
+              // 备用方案：如果是在当前窗口打开
+              store.setState('files.projectPath', result.projectPath);
+              await this.files.loadFileTree();
+              this.files.refreshTree();
+              toast.show('项目已打开: ' + result.projectPath.split('/').pop(), 'success', 2000);
+            }
+          } else {
+            console.warn('⚠️ [渲染进程] 用户取消了项目选择或返回失败:', result);
+          }
+        } catch (error) {
+          toast.show('打开项目失败: ' + error.message, 'error', 3000);
+        }
+      });
+      
+      // 监听从主进程发来的项目打开信号
+        if (window.electronAPI && window.electronAPI.on) {
+          window.electronAPI.on('open-project-from-menu', async (projectData) => {
+            try {
+              // 验证 projectData
+              if (!projectData || !projectData.projectPath) {
+                toast.show('无效的项目数据', 'error', 3000);
+                return;
+              }
+              
+              
+              // 清空编辑器状态，防止旧项目的文件被继承
+              store.setState('editor.activeFile', null);
+              store.setState('editor.openFiles', []);
+              
+              // 清空 AI 会话状态，新项目应该有新的会话
+              store.setState('ai.conversations', []);
+              store.setState('ai.isProcessing', false);
+              store.setState('ai.currentSuggestion', null);
+              store.setState('ai.inlineEditMode', false);
+              
+              // 直接传递项目路径给 FileManager，不依赖全局 store
+              await this.files.loadFileTree(projectData.projectPath);
+              
+              // 获取文件树容器
+              const fileTreeContainer = document.getElementById('file-tree');
+              if (fileTreeContainer) {
+                this.files.renderTree(fileTreeContainer);
+              }
+              
+              // 安全地获取项目名称
+              const projectName = projectData.projectPath.split('/').pop() || 'Unknown Project';
+              toast.show('项目已加载: ' + projectName, 'success', 2000);
+            } catch (error) {
+              toast.show('加载项目失败: ' + error.message, 'error', 3000);
+            }
+          });
+        }
+      
+      // 监听 Open File
+      window.electronAPI.listenToMenuEvent('menu:open-file', async () => {
+        try {
+          const result = await window.electronAPI.openFileDialog();
+          if (result.success && result.filePath) {
+            const fileContent = await window.electronAPI.readFile(result.filePath);
+            if (fileContent.success) {
+              const language = this.detectLanguage(result.filePath);
+              this.editor.openFile(result.filePath, fileContent.content, language);
+              toast.show('文件已打开', 'success', 2000);
+            }
+          }
+        } catch (error) {
+        }
+      });
+      
+      // 监听 Save
+      window.electronAPI.listenToMenuEvent('menu:save', async () => {
+        try {
+          const activeFile = store.getState('editor.activeFile');
+          if (activeFile && this.editor.editor) {
+            const content = this.editor.editor.getValue();
+            const result = await window.electronAPI.writeFile(activeFile, content);
+            if (result.success) {
+              toast.show('文件已保存', 'success', 2000);
+            } else {
+              toast.show('保存失败: ' + result.error, 'error', 3000);
+            }
+          } else {
+            console.warn('⚠️ [渲染进程] 没有活跃文件可以保存');
+          }
+        } catch (error) {
+        }
+      });
+      
     }
 
     bindKeyboardShortcuts() {
@@ -2716,13 +2730,6 @@
       store.subscribe('ui.aiPanelVisible', (visible) => {
         const aiPanel = document.querySelector('.ai-panel');
         const aiResizer = document.getElementById('ai-resizer');
-        
-        console.log('👁️ AI 面板可见性变化', {
-          visible: visible,
-          hasPanel: !!aiPanel,
-          hasResizer: !!aiResizer,
-          currentWidth: aiPanel ? aiPanel.getBoundingClientRect().width : null
-        });
         
         if (aiPanel) {
           if (visible) {
@@ -2841,14 +2848,12 @@
           if (result.success) {
             this.claudeConnected = true;
             this.updateClaudeStatus('connected');
-            console.log('✅ Claude AI 已启动');
           } else {
             console.warn('⚠️ Claude AI 启动失败:', result.message);
             this.updateClaudeStatus('disconnected');
           }
         }
       } catch (error) {
-        console.error('❌ Claude AI 启动异常:', error);
         this.updateClaudeStatus('error', error.message);
       }
     }
@@ -2864,7 +2869,6 @@
         this.claudeConnected = true;
         this.claudeReconnecting = false;
         this.updateClaudeStatus('connected');
-        console.log('🔗 Claude AI 已连接');
       });
 
       // 连接断开
@@ -2878,13 +2882,11 @@
       window.electronAPI.claude.onReconnecting((attempt) => {
         this.claudeReconnecting = true;
         this.updateClaudeStatus('reconnecting', `重连中 (${attempt})`);
-        console.log(`🔄 Claude AI 重连中 (第 ${attempt} 次尝试)`);
       });
 
       // 错误
       window.electronAPI.claude.onError((error) => {
         this.updateClaudeStatus('error', error.message);
-        console.error('❌ Claude AI 错误:', error);
       });
 
       // 消息块（流式响应）
@@ -4195,8 +4197,6 @@ ${textBeforeCursor}
         const state = this.workspaceState.collectState();
         const tabCount = state.editor.openTabs.length;
         
-        console.log('🔍 即将保存的状态:', state);
-        console.log('📂 当前打开标签数:', tabCount);
         
         // 如果没有标签，警告用户
         if (tabCount === 0) {
@@ -4262,13 +4262,11 @@ ${textBeforeCursor}
     document.addEventListener('DOMContentLoaded', () => {
       console.log('✓ DOMContentLoaded 事件触发，开始初始化...');
       studio.init().catch(err => {
-        console.error('❌ 初始化失败:', err);
       });
     });
   } else {
     console.log('✓ DOM 已加载，立即初始化...');
     studio.init().catch(err => {
-      console.error('❌ 初始化失败:', err);
     });
   }
 

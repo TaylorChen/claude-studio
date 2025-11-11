@@ -11,7 +11,6 @@ class IndexedDBManager {
         this.db = null;
         this.isSupported = !!window.indexedDB;
         
-        console.log('📊 IndexedDBManager 初始化:', this.isSupported ? '✓ 支持' : '✗ 不支持');
     }
 
     /**
@@ -27,7 +26,6 @@ class IndexedDBManager {
             const request = indexedDB.open(this.dbName, this.dbVersion);
 
             request.onerror = () => {
-                console.error('❌ IndexedDB 打开失败:', request.error);
                 resolve(false);
             };
 
@@ -79,7 +77,6 @@ class IndexedDBManager {
             const request = store.add(sessionData);
 
             request.onerror = () => {
-                console.error('❌ 保存会话失败:', request.error);
                 resolve(false);
             };
 
@@ -89,7 +86,6 @@ class IndexedDBManager {
             };
 
             transaction.onerror = () => {
-                console.error('❌ 事务失败:', transaction.error);
                 resolve(false);
             };
         });
@@ -110,7 +106,6 @@ class IndexedDBManager {
             const request = store.get('claude_ai_sessions');
 
             request.onerror = () => {
-                console.error('❌ 加载会话失败:', request.error);
                 resolve(null);
             };
 
@@ -147,7 +142,6 @@ class IndexedDBManager {
             };
 
             request.onerror = () => {
-                console.error('❌ 导出失败:', request.error);
                 resolve(null);
             };
         });
@@ -170,7 +164,6 @@ class IndexedDBManager {
             };
 
             request.onerror = () => {
-                console.error('❌ 清空失败:', request.error);
                 resolve(false);
             };
         });
@@ -224,7 +217,6 @@ class IndexedDBManager {
             
             return false;
         } catch (error) {
-            console.error('❌ 迁移失败:', error);
             return false;
         }
     }
@@ -297,7 +289,6 @@ class IndexedDBManager {
                 const addRequest = store.add(checkpointData);
 
                 addRequest.onerror = () => {
-                    console.error('❌ 保存检查点失败:', addRequest.error);
                     resolve(false);
                 };
 
@@ -308,12 +299,10 @@ class IndexedDBManager {
             };
 
             deleteRequest.onerror = () => {
-                console.error('❌ 删除旧检查点失败:', deleteRequest.error);
                 resolve(false);
             };
 
             transaction.onerror = () => {
-                console.error('❌ 事务失败:', transaction.error);
                 resolve(false);
             };
         });
@@ -335,7 +324,6 @@ class IndexedDBManager {
             const request = store.get('claude_checkpoints');
 
             request.onerror = () => {
-                console.error('❌ 加载检查点失败:', request.error);
                 resolve(null);
             };
 
@@ -352,6 +340,189 @@ class IndexedDBManager {
                     console.log('ℹ️ IndexedDB 中没有保存的检查点');
                     resolve(null);
                 }
+            };
+        });
+    }
+
+    /**
+     * 保存代理配置 (Phase 7)
+     * @param {Object} agentConfig - 代理配置
+     * @returns {Promise<boolean>}
+     */
+    async saveAgent(agentConfig) {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return false;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readwrite');
+            const store = transaction.objectStore(this.storeName);
+
+            const key = `agent_${agentConfig.id}`;
+            const agentData = {
+                id: key,
+                ...agentConfig,
+                savedAt: new Date().toISOString()
+            };
+
+            // 先尝试删除，再添加（更新效果）
+            const deleteRequest = store.delete(key);
+            
+            deleteRequest.onsuccess = () => {
+                const addRequest = store.add(agentData);
+
+                addRequest.onerror = () => {
+                    resolve(false);
+                };
+
+                addRequest.onsuccess = () => {
+                    console.log('✓ 代理已保存:', agentConfig.name);
+                    resolve(true);
+                };
+            };
+
+            transaction.onerror = () => {
+                resolve(false);
+            };
+        });
+    }
+
+    /**
+     * 加载所有代理
+     * @returns {Promise<Array>}
+     */
+    async loadAgents() {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readonly');
+            const store = transaction.objectStore(this.storeName);
+
+            const agents = [];
+            const request = store.openCursor();
+
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const key = cursor.key;
+                    if (key.startsWith('agent_')) {
+                        agents.push(cursor.value);
+                    }
+                    cursor.continue();
+                } else {
+                    console.log(`✓ 加载了 ${agents.length} 个代理`);
+                    resolve(agents);
+                }
+            };
+
+            request.onerror = () => {
+                resolve(null);
+            };
+        });
+    }
+
+    /**
+     * 删除代理
+     * @param {string} agentId - 代理 ID
+     * @returns {Promise<boolean>}
+     */
+    async deleteAgent(agentId) {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return false;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readwrite');
+            const store = transaction.objectStore(this.storeName);
+
+            const key = `agent_${agentId}`;
+            const request = store.delete(key);
+
+            request.onsuccess = () => {
+                console.log('✓ 代理已删除:', agentId);
+                resolve(true);
+            };
+
+            request.onerror = () => {
+                resolve(false);
+            };
+        });
+    }
+
+    /**
+     * 加载权限配置 (Phase 6)
+     * @returns {Promise<Object|null>}
+     */
+    async loadPermissionConfig() {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return null;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readonly');
+            const store = transaction.objectStore(this.storeName);
+            const request = store.get('claude_permissions');
+
+            request.onsuccess = () => {
+                if (request.result) {
+                    console.log('✓ 权限配置已加载');
+                    resolve(request.result);
+                } else {
+                    console.log('ℹ️ 没有保存的权限配置');
+                    resolve(null);
+                }
+            };
+
+            request.onerror = () => {
+                resolve(null);
+            };
+        });
+    }
+
+    /**
+     * 保存权限配置 (Phase 6)
+     * @param {Object} config - 权限配置
+     * @returns {Promise<boolean>}
+     */
+    async savePermissionConfig(config) {
+        if (!this.db) {
+            console.warn('⚠️ IndexedDB 未初始化');
+            return false;
+        }
+
+        return new Promise((resolve) => {
+            const transaction = this.db.transaction([this.storeName], 'readwrite');
+            const store = transaction.objectStore(this.storeName);
+
+            const configData = {
+                id: 'claude_permissions',
+                ...config,
+                savedAt: new Date().toISOString()
+            };
+
+            const deleteRequest = store.delete('claude_permissions');
+            
+            deleteRequest.onsuccess = () => {
+                const addRequest = store.add(configData);
+
+                addRequest.onerror = () => {
+                    resolve(false);
+                };
+
+                addRequest.onsuccess = () => {
+                    console.log('✓ 权限配置已保存');
+                    resolve(true);
+                };
+            };
+
+            transaction.onerror = () => {
+                resolve(false);
             };
         });
     }

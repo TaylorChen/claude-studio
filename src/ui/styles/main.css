@@ -595,6 +595,23 @@ body {
 #terminal-container {
   flex: 1;
   padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+}
+
+/* xterm 终端样式 */
+.xterm {
+  height: 100%;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.xterm-screen {
+  overflow: visible;
 }
 
 /* ==================== 状态栏 ==================== */

@@ -153,16 +153,57 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 通用事件监听
   on: (channel, callback) => {
-    const validChannels = ['claude-ready', 'claude-output', 'claude-error', 'claude-closed', 'claude-disconnected', 'project-changed', 'toggle-ai-panel'];
+    const validChannels = [
+      'claude-ready', 
+      'claude-output', 
+      'claude-error', 
+      'claude-closed', 
+      'claude-disconnected', 
+      'project-changed', 
+      'toggle-ai-panel',
+      'menu:open-project',
+      'menu:open-file',
+      'menu:save',
+      'menu:ai-inline-edit',
+      'menu:ai-chat',
+      'open-project-from-menu'
+    ];
     if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, callback);
-      return () => ipcRenderer.removeListener(channel, callback);
+      // IPC 回调的第一个参数是 event，后面才是数据
+      const wrappedCallback = (event, ...args) => {
+        console.log(`[preload.js on] 收到事件: ${channel}, 参数:`, args);
+        callback(...args);
+      };
+      ipcRenderer.on(channel, wrappedCallback);
+      return () => ipcRenderer.removeListener(channel, wrappedCallback);
     }
   },
 
   // 移除事件监听器
   removeAllListeners: (channel) => {
     ipcRenderer.removeAllListeners(channel);
+  },
+
+  // 菜单事件监听 - 直接暴露给渲染进程
+  onMenuEvent: (eventName, callback) => {
+    console.log(`[preload.js] 注册菜单事件监听: ${eventName}`);
+    ipcRenderer.on(eventName, (event, ...args) => {
+      console.log(`[preload.js] 收到菜单事件: ${eventName}`, args);
+      callback(...args);
+    });
+    return () => {
+      console.log(`[preload.js] 移除菜单事件监听: ${eventName}`);
+      ipcRenderer.removeListener(eventName, callback);
+    };
+  },
+  
+  // 直接的菜单事件监听（不需要白名单）
+  listenToMenuEvent: (eventName, callback) => {
+    console.log(`[preload.js] 直接监听菜单事件: ${eventName}`);
+    ipcRenderer.on(eventName, (event, ...args) => {
+      console.log(`[preload.js] 直接接收菜单事件: ${eventName}`, args);
+      callback(...args);
+    });
   }
 });
 

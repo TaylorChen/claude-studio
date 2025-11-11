@@ -22,7 +22,6 @@ class MessageBuilder {
    * @returns {Object} 消息对象
    */
   buildMessage(text, attachments = []) {
-    console.log('📝 构建消息:', { text, attachmentCount: attachments.length });
 
     // 基础消息对象
     const messageObj = {
@@ -50,7 +49,6 @@ class MessageBuilder {
     const ext = this.getFileExtension(attachment.name);
     const fileType = this.getFileType(ext);
 
-    console.log(`📎 格式化附件: ${attachment.name} (${fileType})`);
 
     return {
       id: attachment.id,

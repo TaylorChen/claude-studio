@@ -18,7 +18,6 @@ class GitComponent {
         try {
             await this.refreshStatus();
         } catch (error) {
-            console.error('❌ Git 组件初始化失败:', error);
         }
     }
 

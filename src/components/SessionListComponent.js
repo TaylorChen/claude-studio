@@ -244,7 +244,6 @@ class SessionListComponent {
       this.renderSessions(conversations);
       this.updateStats(conversations.length);
     } catch (error) {
-      console.error('❌ 加载会话失败:', error);
       this.showError('加载会话失败');
     }
   }
@@ -450,7 +449,6 @@ class SessionListComponent {
         this.showError('会话不存在');
       }
     } catch (error) {
-      console.error('❌ 恢复会话失败:', error);
       this.showError('恢复会话失败');
     }
   }
@@ -469,7 +467,6 @@ class SessionListComponent {
       this.loadSessions();
       this.showSuccess('会话已删除');
     } catch (error) {
-      console.error('❌ 删除会话失败:', error);
       this.showError('删除会话失败');
     }
   }
@@ -583,7 +580,6 @@ class SessionListComponent {
       window.sessionExportImportManager.downloadFile(filename, content, mimeType);
       this.showSuccess(`✓ 已导出 ${sessions.length} 个会话 (${format.toUpperCase()})`);
     } catch (error) {
-      console.error('❌ 导出失败:', error);
       this.showError('导出失败: ' + error.message);
     }
   }
@@ -663,7 +659,6 @@ class SessionListComponent {
 
       this.showSuccess(`✓ 成功导入 ${successCount} 个会话`);
     } catch (error) {
-      console.error('❌ 导入失败:', error);
       this.showError('导入失败: ' + error.message);
     }
   }

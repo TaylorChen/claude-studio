@@ -34,7 +34,6 @@ class TerminalComponent {
             this.showWelcome();
 
         } catch (error) {
-            console.error('❌ Terminal 初始化失败:', error);
             throw error;
         }
     }
